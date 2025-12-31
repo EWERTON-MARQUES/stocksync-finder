@@ -96,7 +96,7 @@ export default function Dashboard() {
           iconClassName="bg-primary/10 text-primary"
         />
         <StatCard
-          title="Itens em Estoque"
+          title="Total em Estoque"
           value={formatNumber(stats?.totalStock || 0)}
           icon={Boxes}
           iconClassName="bg-success/10 text-success"
