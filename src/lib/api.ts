@@ -1,5 +1,13 @@
 import { Product, StockMovement, DashboardStats, ApiConfig } from './types';
 
+export interface PaginatedProducts {
+  products: Product[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 // API Service for Wedrop
 class ApiService {
   private config: ApiConfig | null = null;
@@ -90,11 +98,11 @@ class ApiService {
     };
   }
 
-  async getProducts(page: number = 1, limit: number = 50, search: string = ''): Promise<Product[]> {
+  async getProducts(page: number = 1, limit: number = 50, search: string = ''): Promise<PaginatedProducts> {
     const config = this.getConfig();
     
     if (!config?.baseUrl || !config?.token) {
-      return [];
+      return { products: [], total: 0, page: 1, limit, totalPages: 0 };
     }
 
     try {
@@ -105,23 +113,37 @@ class ApiService {
       
       // Handle different response formats
       let products: any[] = [];
+      let total = 0;
       
       if (Array.isArray(data)) {
         products = data;
-      } else if (data?.data && Array.isArray(data.data)) {
-        products = data.data;
-      } else if (data?.products && Array.isArray(data.products)) {
-        products = data.products;
-      } else if (data?.items && Array.isArray(data.items)) {
-        products = data.items;
+        total = data.length;
       } else if (data?.results && Array.isArray(data.results)) {
         products = data.results;
+        total = data.total || products.length;
+      } else if (data?.data && Array.isArray(data.data)) {
+        products = data.data;
+        total = data.total || data.count || products.length;
+      } else if (data?.products && Array.isArray(data.products)) {
+        products = data.products;
+        total = data.total || data.count || products.length;
+      } else if (data?.items && Array.isArray(data.items)) {
+        products = data.items;
+        total = data.total || data.count || products.length;
       }
 
-      return products.map(item => this.transformWedropProduct(item));
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        products: products.map(item => this.transformWedropProduct(item)),
+        total,
+        page,
+        limit,
+        totalPages
+      };
     } catch (error) {
       console.error('Error fetching products:', error);
-      return [];
+      return { products: [], total: 0, page: 1, limit, totalPages: 0 };
     }
   }
 
@@ -190,10 +212,11 @@ class ApiService {
   }
 
   async getDashboardStats(): Promise<DashboardStats> {
-    const products = await this.getProducts();
+    const result = await this.getProducts(1, 100);
+    const products = result.products;
     
     return {
-      totalProducts: products.length,
+      totalProducts: result.total,
       totalStock: products.reduce((acc, p) => acc + p.stock, 0),
       lowStockProducts: products.filter(p => p.status === 'low_stock').length,
       outOfStockProducts: products.filter(p => p.status === 'out_of_stock').length,
@@ -203,22 +226,18 @@ class ApiService {
   }
 
   async searchProducts(query: string): Promise<Product[]> {
-    const products = await this.getProducts();
-    const lowerQuery = query.toLowerCase();
-    
-    return products.filter(p => 
-      p.name.toLowerCase().includes(lowerQuery) ||
-      p.sku.toLowerCase().includes(lowerQuery)
-    );
+    const result = await this.getProducts(1, 50, query);
+    return result.products;
   }
 
   // Test connection
-  async testConnection(): Promise<{ success: boolean; message: string }> {
+  async testConnection(): Promise<{ success: boolean; message: string; total?: number }> {
     try {
-      const products = await this.getProducts(1, 1);
+      const result = await this.getProducts(1, 1);
       return {
         success: true,
-        message: `Conexão bem sucedida! ${products.length > 0 ? 'Produtos encontrados.' : 'API funcionando.'}`
+        message: `Conexão bem sucedida! ${result.total} produtos encontrados.`,
+        total: result.total
       };
     } catch (error: any) {
       return {

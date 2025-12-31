@@ -16,12 +16,12 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [statsData, products] = await Promise.all([
+        const [statsData, productsResult] = await Promise.all([
           apiService.getDashboardStats(),
-          apiService.getProducts(),
+          apiService.getProducts(1, 5),
         ]);
         setStats(statsData);
-        setRecentProducts(products.slice(0, 5));
+        setRecentProducts(productsResult.products);
       } finally {
         setLoading(false);
       }
