@@ -1,5 +1,3 @@
-import { ProductHistory } from '@/lib/types';
-import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -56,24 +54,8 @@ export default function ProductDetail() {
   const [product, setProduct] = useState<Product | null>(null);
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [history, setHistory] = useState<ProductHistory[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
 
   useEffect(() => {
-    const loadHistory = async () => {
-  try {
-    setLoadingHistory(true);
-    const data = await api.getProductHistory(id as string);
-    setHistory(data);
-  } catch (error) {
-    console.error('Erro ao carregar histórico', error);
-  } finally {
-    setLoadingHistory(false);
-  }
-};
-
-loadHistory();
-
     async function loadProduct() {
       if (!id) return;
       try {
@@ -320,49 +302,7 @@ loadHistory();
             ) : (
               <div className="flex flex-col items-center justify-center py-12">
                 <RefreshCcw className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">N{loadingHistory && (
-                  <p className="text-sm text-muted-foreground">
-    Carregando histórico...
-  </p>
-)}
-
-{!loadingHistory && history.length === 0 && (
-  <p className="text-sm text-muted-foreground">
-    Nenhuma movimentação registrada
-  </p>
-)}
-
-{!loadingHistory && history.length > 0 && (
-  <div className="space-y-2">
-    {history.map(item => (
-      <div
-        key={item.id}
-        className="flex justify-between items-center rounded-md border p-3"
-      >
-        <div>
-          <p className="font-medium">
-            {item.type}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {new Date(item.createdAt).toLocaleString()}
-          </p>
-        </div>
-
-        <span
-          className={
-            item.type === 'ENTRADA'
-              ? 'text-green-600'
-              : 'text-red-600'
-          }
-        >
-          {item.type === 'ENTRADA' ? '+' : '-'}
-          {item.quantity}
-        </span>
-      </div>
-    ))}
-  </div>
-)}
-</p>
+                <p className="text-muted-foreground">Nenhuma movimentação registrada</p>
               </div>
             )}
           </div>
