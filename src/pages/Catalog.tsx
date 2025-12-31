@@ -1,52 +1,91 @@
-import { useEffect, useState } from 'react';
-import { Search, Filter, Package } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Search, Filter, Package, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { apiService } from '@/lib/api';
+import { apiService, PaginatedProducts } from '@/lib/api';
 import { Product } from '@/lib/types';
 import { Link } from 'react-router-dom';
 
 export default function Catalog() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [paginatedData, setPaginatedData] = useState<PaginatedProducts>({
+    products: [],
+    total: 0,
+    page: 1,
+    limit: 50,
+    totalPages: 0
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const limit = 50;
 
-  useEffect(() => {
-    async function loadProducts() {
-      try {
-        const data = await apiService.getProducts();
-        setProducts(data);
-        setFilteredProducts(data);
-      } finally {
-        setLoading(false);
-      }
+  const loadProducts = useCallback(async (page: number, search: string) => {
+    setLoading(true);
+    try {
+      const data = await apiService.getProducts(page, limit, search);
+      setPaginatedData(data);
+    } finally {
+      setLoading(false);
     }
-    loadProducts();
   }, []);
 
   useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredProducts(products);
-    } else {
-      const query = searchQuery.toLowerCase();
-      const filtered = products.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          p.sku.toLowerCase().includes(query)
-      );
-      setFilteredProducts(filtered);
-    }
-  }, [searchQuery, products]);
+    loadProducts(currentPage, searchQuery);
+  }, [currentPage, loadProducts]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1);
+      loadProducts(1, searchQuery);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, loadProducts]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
     }).format(value);
+  };
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= paginatedData.totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const renderPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const { totalPages, page } = paginatedData;
+    
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+      
+      if (page > 3) {
+        pages.push('...');
+      }
+      
+      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) {
+        pages.push(i);
+      }
+      
+      if (page < totalPages - 2) {
+        pages.push('...');
+      }
+      
+      pages.push(totalPages);
+    }
+    
+    return pages;
   };
 
   return (
@@ -80,99 +119,188 @@ export default function Catalog() {
       </div>
 
       {/* Results Count */}
-      <p className="mb-4 text-sm text-muted-foreground">
-        {filteredProducts.length} produto(s) encontrado(s)
-      </p>
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {paginatedData.total > 0 ? (
+            <>
+              Mostrando{' '}
+              <span className="font-medium text-foreground">
+                {((currentPage - 1) * limit) + 1}
+              </span>
+              {' '}-{' '}
+              <span className="font-medium text-foreground">
+                {Math.min(currentPage * limit, paginatedData.total)}
+              </span>
+              {' '}de{' '}
+              <span className="font-medium text-foreground">
+                {paginatedData.total.toLocaleString('pt-BR')}
+              </span>
+              {' '}produtos
+            </>
+          ) : (
+            'Nenhum produto encontrado'
+          )}
+        </p>
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center min-h-[30vh]">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden animate-fade-in">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Produto
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    SKU
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Categoria
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Estoque
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Preço
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Fornecedor
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredProducts.map((product) => (
-                  <tr key={product.id} className="table-row-hover group">
-                    <td className="px-6 py-4">
-                      <Link
-                        to={`/catalogo/${product.id}`}
-                        className="font-medium text-foreground hover:text-primary transition-colors"
-                      >
-                        {product.name}
-                      </Link>
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                        {product.description}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground font-mono">
-                      {product.sku}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">
-                      {product.category}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-foreground">
-                        {product.stock}
-                      </span>
-                      <span className="text-xs text-muted-foreground ml-1">
-                        {product.unit}
-                      </span>
-                      <p className="text-xs text-muted-foreground">
-                        Mín: {product.minStock}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium text-foreground">
-                      {formatCurrency(product.price)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">
-                      {product.supplier}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={product.status} />
-                    </td>
+        <>
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden animate-fade-in">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Produto
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      SKU
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Categoria
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Estoque
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Preço
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Fornecedor
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Status
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {paginatedData.products.map((product) => (
+                    <tr key={product.id} className="table-row-hover group">
+                      <td className="px-6 py-4">
+                        <Link
+                          to={`/catalogo/${product.id}`}
+                          className="font-medium text-foreground hover:text-primary transition-colors"
+                        >
+                          {product.name}
+                        </Link>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                          {product.description}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground font-mono">
+                        {product.sku}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
+                        {product.category}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-medium text-foreground">
+                          {product.stock}
+                        </span>
+                        <span className="text-xs text-muted-foreground ml-1">
+                          {product.unit}
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          Mín: {product.minStock}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium text-foreground">
+                        {formatCurrency(product.price)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
+                        {product.supplier}
+                      </td>
+                      <td className="px-6 py-4">
+                        <StatusBadge status={product.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {paginatedData.products.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Package className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">Nenhum produto encontrado</p>
+                <p className="text-sm text-muted-foreground/70">
+                  Tente buscar com outros termos
+                </p>
+              </div>
+            )}
           </div>
 
-          {filteredProducts.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Package className="w-12 h-12 text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground">Nenhum produto encontrado</p>
-              <p className="text-sm text-muted-foreground/70">
-                Tente buscar com outros termos
+          {/* Pagination Controls */}
+          {paginatedData.totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+              <p className="text-sm text-muted-foreground">
+                Página {currentPage} de {paginatedData.totalPages}
               </p>
+              
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToPage(1)}
+                  disabled={currentPage === 1}
+                  className="h-9 w-9"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="h-9 w-9"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                
+                <div className="flex items-center gap-1 mx-2">
+                  {renderPageNumbers().map((page, index) => (
+                    page === '...' ? (
+                      <span key={`ellipsis-${index}`} className="px-2 text-muted-foreground">...</span>
+                    ) : (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => goToPage(page as number)}
+                        className="h-9 w-9"
+                      >
+                        {page}
+                      </Button>
+                    )
+                  ))}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === paginatedData.totalPages}
+                  className="h-9 w-9"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToPage(paginatedData.totalPages)}
+                  disabled={currentPage === paginatedData.totalPages}
+                  className="h-9 w-9"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
-        </div>
+        </>
       )}
     </MainLayout>
   );
