@@ -47,6 +47,10 @@ export interface Product {
   createdAt: string;
   updatedAt: string;
   isSelling?: boolean;
+  avgSellsQuantityPast7Days?: number | null;
+  avgSellsQuantityPast15Days?: number | null;
+  avgSellsQuantityPast30Days?: number | null;
+  soldQuantity?: number | null;
 }
 
 export interface StockMovement {
