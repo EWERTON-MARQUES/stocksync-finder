@@ -52,12 +52,12 @@ export function AppSidebar() {
       {/* Footer */}
       <div className="px-6 py-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white bg-white">
             <span className="text-sm font-medium text-sidebar-foreground">A</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-sidebar-foreground">Admin</span>
-            <span className="text-xs text-sidebar-muted">admin@empresa.com</span>
+            <span className="text-sm font-medium text-white">Admin</span>
+            <span className="text-xs text-white">admin@empresa.com</span>
           </div>
         </div>
       </div>
