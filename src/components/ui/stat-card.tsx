@@ -24,13 +24,13 @@ export function StatCard({
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="mt-2 text-3xl font-bold text-center text-black">{value}</p>
+          <p className="mt-2 text-3xl font-bold text-black text-left">{value}</p>
           {trend && <p className={cn('mt-2 text-sm font-medium', trend.isPositive ? 'text-success' : 'text-destructive')}>
               {trend.isPositive ? '+' : ''}{trend.value}% vs mês anterior
             </p>}
         </div>
         <div className={cn('flex items-center justify-center w-12 h-12 rounded-xl', iconClassName || 'bg-primary/10 text-primary')}>
-          <Icon className="w-6 h-6" />
+          <Icon className="w-6 h-6 border-none" />
         </div>
       </div>
     </div>;
