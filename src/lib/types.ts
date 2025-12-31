@@ -80,3 +80,11 @@ export interface DashboardStats {
   totalValue: number;
   recentMovements: number;
 }
+
+export interface ProductHistory {
+  id: string;
+  productId: string;
+  type: 'ENTRADA' | 'SAÍDA';
+  quantity: number;
+  createdAt: string;
+}

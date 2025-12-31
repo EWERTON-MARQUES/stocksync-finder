@@ -1,4 +1,6 @@
 import { Product, StockMovement, DashboardStats, ApiConfig } from './types';
+import { ProductHistory } from './types';
+
 
 export interface PaginatedProducts {
   products: Product[];
@@ -456,3 +458,24 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
+
+async getProductHistory(productId: string): Promise<ProductHistory[]> {
+  if (!this.config) {
+    throw new Error('API não configurada');
+  }
+
+  const response = await fetch(
+    `${this.config.baseUrl}/products/${productId}/history`,
+    {
+      headers: {
+        Authorization: `Bearer ${this.config.token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Erro ao buscar histórico do produto');
+  }
+
+  return response.json();
+}
