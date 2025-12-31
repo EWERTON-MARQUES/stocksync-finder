@@ -8,9 +8,27 @@ export interface PaginatedProducts {
   totalPages: number;
 }
 
+export interface CatalogFilters {
+  category?: string;
+  supplier?: string;
+  status?: string;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+}
+
+export interface Supplier {
+  id: number;
+  name: string;
+}
+
 // API Service for Wedrop
 class ApiService {
   private config: ApiConfig | null = null;
+  private categoriesCache: Category[] = [];
+  private suppliersCache: Supplier[] = [];
 
   setConfig(config: ApiConfig) {
     this.config = config;
@@ -118,10 +136,14 @@ class ApiService {
       createdAt: item.created_at || item.createdAt || new Date().toISOString(),
       updatedAt: item.updated_at || item.updatedAt || new Date().toISOString(),
       isSelling: item.isSelling ?? true,
+      avgSellsQuantityPast7Days: item.avgSellsQuantityPast7Days,
+      avgSellsQuantityPast15Days: item.avgSellsQuantityPast15Days,
+      avgSellsQuantityPast30Days: item.avgSellsQuantityPast30Days,
+      soldQuantity: item.soldQuantity,
     };
   }
 
-  async getProducts(page: number = 1, limit: number = 50, search: string = ''): Promise<PaginatedProducts> {
+  async getProducts(page: number = 1, limit: number = 50, search: string = '', filters?: CatalogFilters): Promise<PaginatedProducts> {
     const config = this.getConfig();
     
     if (!config?.baseUrl || !config?.token) {
@@ -130,9 +152,23 @@ class ApiService {
 
     try {
       const offset = (page - 1) * limit;
-      const data = await this.fetchWithAuth(
-        `/catalog?limit=${limit}&offset=${offset}&page=${page}&search=${encodeURIComponent(search)}&categoryId=0&suplierId=&brand=&orderBy=id%7Cdesc`
-      );
+      let endpoint = `/catalog?limit=${limit}&offset=${offset}&page=${page}&search=${encodeURIComponent(search)}`;
+      
+      if (filters?.category && filters.category !== 'all') {
+        endpoint += `&categoryId=${filters.category}`;
+      } else {
+        endpoint += `&categoryId=0`;
+      }
+      
+      if (filters?.supplier && filters.supplier !== 'all') {
+        endpoint += `&suplierId=${filters.supplier}`;
+      } else {
+        endpoint += `&suplierId=`;
+      }
+      
+      endpoint += `&brand=&orderBy=id%7Cdesc`;
+      
+      const data = await this.fetchWithAuth(endpoint);
       
       // Handle different response formats
       let products: any[] = [];
@@ -155,10 +191,20 @@ class ApiService {
         total = data.total || data.count || products.length;
       }
 
+      // Cache categories and suppliers for filters
+      this.extractFiltersFromProducts(products);
+
+      let transformedProducts = products.map(item => this.transformWedropProduct(item));
+      
+      // Apply status filter client-side if needed
+      if (filters?.status && filters.status !== 'all') {
+        transformedProducts = transformedProducts.filter(p => p.status === filters.status);
+      }
+
       const totalPages = Math.ceil(total / limit);
 
       return {
-        products: products.map(item => this.transformWedropProduct(item)),
+        products: transformedProducts,
         total,
         page,
         limit,
@@ -168,6 +214,45 @@ class ApiService {
       console.error('Error fetching products:', error);
       return { products: [], total: 0, page: 1, limit, totalPages: 0 };
     }
+  }
+
+  private extractFiltersFromProducts(products: any[]) {
+    const categoriesMap = new Map<number, string>();
+    const suppliersMap = new Map<number, string>();
+    
+    products.forEach(p => {
+      if (p.categoryId && p.category?.name) {
+        categoriesMap.set(p.categoryId, p.category.name);
+      }
+      if (p.suplierId && p.suplier?.name) {
+        suppliersMap.set(p.suplierId, p.suplier.name.trim());
+      }
+    });
+    
+    if (categoriesMap.size > 0) {
+      this.categoriesCache = Array.from(categoriesMap.entries()).map(([id, name]) => ({ id, name }));
+    }
+    if (suppliersMap.size > 0) {
+      this.suppliersCache = Array.from(suppliersMap.entries()).map(([id, name]) => ({ id, name }));
+    }
+  }
+
+  async getCategories(): Promise<Category[]> {
+    if (this.categoriesCache.length > 0) {
+      return this.categoriesCache;
+    }
+    // Fetch some products to populate cache
+    await this.getProducts(1, 100);
+    return this.categoriesCache;
+  }
+
+  async getSuppliers(): Promise<Supplier[]> {
+    if (this.suppliersCache.length > 0) {
+      return this.suppliersCache;
+    }
+    // Fetch some products to populate cache
+    await this.getProducts(1, 100);
+    return this.suppliersCache;
   }
 
   async getProduct(id: string): Promise<Product | undefined> {
@@ -209,7 +294,12 @@ class ApiService {
         try {
           data = await this.fetchWithAuth(`/products/${productId}/stock-movements`);
         } catch {
-          data = await this.fetchWithAuth(`/stock/movements?product_id=${productId}`);
+          try {
+            data = await this.fetchWithAuth(`/stock/movements?product_id=${productId}`);
+          } catch {
+            // Return empty if no movements endpoint available
+            return [];
+          }
         }
       }
       
@@ -234,18 +324,112 @@ class ApiService {
     }
   }
 
-  async getDashboardStats(): Promise<DashboardStats> {
-    const result = await this.getProducts(1, 100);
-    const products = result.products;
+  // Fetch all products for accurate stats (paginated fetching)
+  async getAllProductsStats(): Promise<{ products: Product[], total: number }> {
+    const config = this.getConfig();
     
-    return {
-      totalProducts: result.total,
-      totalStock: products.reduce((acc, p) => acc + p.stock, 0),
-      lowStockProducts: products.filter(p => p.status === 'low_stock').length,
-      outOfStockProducts: products.filter(p => p.status === 'out_of_stock').length,
-      totalValue: products.reduce((acc, p) => acc + (p.price * p.stock), 0),
-      recentMovements: 0,
-    };
+    if (!config?.baseUrl || !config?.token) {
+      return { products: [], total: 0 };
+    }
+
+    try {
+      // First get total count
+      const firstPage = await this.getProducts(1, 100);
+      const total = firstPage.total;
+      const allProducts: Product[] = [...firstPage.products];
+      
+      // Fetch remaining pages in parallel (max 10 pages at a time to avoid overload)
+      const totalPages = Math.ceil(total / 100);
+      const batchSize = 10;
+      
+      for (let batch = 1; batch < Math.ceil(totalPages / batchSize); batch++) {
+        const startPage = batch * batchSize + 1;
+        const endPage = Math.min((batch + 1) * batchSize, totalPages);
+        
+        const promises = [];
+        for (let page = startPage; page <= endPage; page++) {
+          promises.push(this.getProducts(page, 100));
+        }
+        
+        const results = await Promise.all(promises);
+        results.forEach(result => {
+          allProducts.push(...result.products);
+        });
+      }
+      
+      return { products: allProducts, total };
+    } catch (error) {
+      console.error('Error fetching all products:', error);
+      return { products: [], total: 0 };
+    }
+  }
+
+  async getDashboardStats(): Promise<DashboardStats> {
+    const config = this.getConfig();
+    
+    if (!config?.baseUrl || !config?.token) {
+      return {
+        totalProducts: 0,
+        totalStock: 0,
+        lowStockProducts: 0,
+        outOfStockProducts: 0,
+        totalValue: 0,
+        recentMovements: 0,
+      };
+    }
+
+    try {
+      // Fetch multiple pages to get accurate stats
+      const allProducts: Product[] = [];
+      let totalProducts = 0;
+      
+      // Fetch first page to get total
+      const firstPage = await this.getProducts(1, 100);
+      allProducts.push(...firstPage.products);
+      totalProducts = firstPage.total;
+      
+      // Fetch more pages for better accuracy (up to 1000 products for stats)
+      const pagesToFetch = Math.min(Math.ceil(totalProducts / 100), 10);
+      const promises = [];
+      
+      for (let page = 2; page <= pagesToFetch; page++) {
+        promises.push(this.getProducts(page, 100));
+      }
+      
+      const results = await Promise.all(promises);
+      results.forEach(result => {
+        allProducts.push(...result.products);
+      });
+      
+      // Calculate stats from fetched products
+      const totalStock = allProducts.reduce((acc, p) => acc + p.stock, 0);
+      // Low stock = stock <= 80 units
+      const lowStockProducts = allProducts.filter(p => p.stock > 0 && p.stock <= 80).length;
+      const outOfStockProducts = allProducts.filter(p => p.stock === 0).length;
+      const totalValue = allProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
+      
+      // Extrapolate stats for total products if we didn't fetch all
+      const sampleRatio = allProducts.length / totalProducts;
+      
+      return {
+        totalProducts,
+        totalStock: sampleRatio < 1 ? Math.round(totalStock / sampleRatio) : totalStock,
+        lowStockProducts: sampleRatio < 1 ? Math.round(lowStockProducts / sampleRatio) : lowStockProducts,
+        outOfStockProducts: sampleRatio < 1 ? Math.round(outOfStockProducts / sampleRatio) : outOfStockProducts,
+        totalValue: sampleRatio < 1 ? Math.round(totalValue / sampleRatio) : totalValue,
+        recentMovements: 0,
+      };
+    } catch (error) {
+      console.error('Error getting dashboard stats:', error);
+      return {
+        totalProducts: 0,
+        totalStock: 0,
+        lowStockProducts: 0,
+        outOfStockProducts: 0,
+        totalValue: 0,
+        recentMovements: 0,
+      };
+    }
   }
 
   async searchProducts(query: string): Promise<Product[]> {
