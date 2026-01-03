@@ -39,6 +39,7 @@ interface StockSnapshot {
 export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
+  const [totalProductsFromApi, setTotalProductsFromApi] = useState<number>(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [snapshots, setSnapshots] = useState<StockSnapshot[]>([]);
@@ -53,6 +54,10 @@ export default function Reports() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      // Fetch total from API first
+      const stats = await apiService.getDashboardStats();
+      setTotalProductsFromApi(stats.totalProducts);
+      
       const [allProducts, cats, supps] = await Promise.all([
         apiService.getAllProductsForStats(),
         apiService.getCategories(),
@@ -108,7 +113,10 @@ export default function Reports() {
   };
 
   // Calculate metrics - ESTOQUE ONLY (usando costPrice = Custo Wedrop)
-  const totalProducts = filteredProducts.length;
+  // Use API total when no filters, otherwise use filtered count
+  const totalProducts = (categoryFilter === 'all' && supplierFilter === 'all' && stockFilter === 'all') 
+    ? totalProductsFromApi 
+    : filteredProducts.length;
   const totalStock = filteredProducts.reduce((acc, p) => acc + p.stock, 0);
   const totalCostValue = filteredProducts.reduce((acc, p) => acc + (p.costPrice * p.stock), 0);
   const lowStockCount = filteredProducts.filter(p => p.stock > 0 && p.stock <= 80).length;
