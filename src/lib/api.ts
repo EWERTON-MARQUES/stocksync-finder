@@ -44,10 +44,14 @@ class ApiService {
   private config: ApiConfig | null = null;
   private categoriesCache: Category[] = [];
   private suppliersCache: Supplier[] = [];
+  private allProductsCache: Product[] | null = null;
+  private allProductsCacheTime: number = 0;
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   setConfig(config: ApiConfig) {
     this.config = config;
     localStorage.setItem('apiConfig', JSON.stringify(config));
+    this.allProductsCache = null; // Clear cache on config change
   }
 
   getConfig(): ApiConfig | null {
@@ -63,6 +67,7 @@ class ApiService {
   clearConfig() {
     this.config = null;
     localStorage.removeItem('apiConfig');
+    this.allProductsCache = null;
   }
 
   private async fetchWithAuth(endpoint: string, options: RequestInit = {}) {
@@ -183,9 +188,11 @@ class ApiService {
         endpoint += `&suplierId=`;
       }
       
-      // Order by stock desc if sortBy is 'stock_desc'
+      // Order by stock if sortBy is specified
       if (filters?.sortBy === 'stock_desc') {
         endpoint += `&brand=&orderBy=availableQuantity%7Cdesc`;
+      } else if (filters?.sortBy === 'stock_asc') {
+        endpoint += `&brand=&orderBy=availableQuantity%7Casc`;
       } else {
         endpoint += `&brand=&orderBy=id%7Cdesc`;
       }
@@ -221,11 +228,6 @@ class ApiService {
       // Apply status filter client-side if needed
       if (filters?.status && filters.status !== 'all') {
         transformedProducts = transformedProducts.filter(p => p.status === filters.status);
-      }
-
-      // Sort by stock desc client-side as fallback
-      if (filters?.sortBy === 'stock_desc') {
-        transformedProducts.sort((a, b) => b.stock - a.stock);
       }
 
       const totalPages = Math.ceil(total / limit);
@@ -359,43 +361,47 @@ class ApiService {
     }
   }
 
-  // Fetch all products for accurate stats (paginated fetching)
-  async getAllProductsStats(): Promise<{ products: Product[], total: number }> {
+  // Fetch all products for accurate stats with caching
+  async getAllProductsForStats(): Promise<Product[]> {
+    const now = Date.now();
+    
+    // Return cached data if still valid
+    if (this.allProductsCache && (now - this.allProductsCacheTime) < this.CACHE_DURATION) {
+      return this.allProductsCache;
+    }
+
     const config = this.getConfig();
     
     if (!config?.baseUrl || !config?.token) {
-      return { products: [], total: 0 };
+      return [];
     }
 
     try {
-      // First get total count
-      const firstPage = await this.getProducts(1, 100);
-      const total = firstPage.total;
-      const allProducts: Product[] = [...firstPage.products];
+      const allProducts: Product[] = [];
+      let page = 1;
+      const limit = 100;
+      let hasMore = true;
       
-      // Fetch remaining pages in parallel (max 10 pages at a time to avoid overload)
-      const totalPages = Math.ceil(total / 100);
-      const batchSize = 10;
-      
-      for (let batch = 1; batch < Math.ceil(totalPages / batchSize); batch++) {
-        const startPage = batch * batchSize + 1;
-        const endPage = Math.min((batch + 1) * batchSize, totalPages);
+      // Fetch all pages
+      while (hasMore && page <= 50) { // Max 50 pages (5000 products)
+        const result = await this.getProducts(page, limit);
+        allProducts.push(...result.products);
         
-        const promises = [];
-        for (let page = startPage; page <= endPage; page++) {
-          promises.push(this.getProducts(page, 100));
+        if (result.products.length < limit || allProducts.length >= result.total) {
+          hasMore = false;
+        } else {
+          page++;
         }
-        
-        const results = await Promise.all(promises);
-        results.forEach(result => {
-          allProducts.push(...result.products);
-        });
       }
       
-      return { products: allProducts, total };
+      // Cache the results
+      this.allProductsCache = allProducts;
+      this.allProductsCacheTime = now;
+      
+      return allProducts;
     } catch (error) {
       console.error('Error fetching all products:', error);
-      return { products: [], total: 0 };
+      return [];
     }
   }
 
@@ -414,45 +420,21 @@ class ApiService {
     }
 
     try {
-      // Fetch multiple pages to get accurate stats
-      const allProducts: Product[] = [];
-      let totalProducts = 0;
+      // Fetch all products for accurate calculations
+      const allProducts = await this.getAllProductsForStats();
       
-      // Fetch first page to get total
-      const firstPage = await this.getProducts(1, 100);
-      allProducts.push(...firstPage.products);
-      totalProducts = firstPage.total;
-      
-      // Fetch more pages for better accuracy (up to 1000 products for stats)
-      const pagesToFetch = Math.min(Math.ceil(totalProducts / 100), 10);
-      const promises = [];
-      
-      for (let page = 2; page <= pagesToFetch; page++) {
-        promises.push(this.getProducts(page, 100));
-      }
-      
-      const results = await Promise.all(promises);
-      results.forEach(result => {
-        allProducts.push(...result.products);
-      });
-      
-      // Calculate stats from fetched products - count actual products
+      const totalProducts = allProducts.length;
       const totalStock = allProducts.reduce((acc, p) => acc + p.stock, 0);
-      // Low stock = stock > 0 AND stock <= 80 units
       const lowStockProducts = allProducts.filter(p => p.stock > 0 && p.stock <= 80).length;
-      // Out of stock = stock === 0 exactly
       const outOfStockProducts = allProducts.filter(p => p.stock === 0).length;
       const totalValue = allProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
       
-      // Extrapolate stats for total products if we didn't fetch all
-      const sampleRatio = allProducts.length / totalProducts;
-      
       return {
         totalProducts,
-        totalStock: sampleRatio < 1 ? Math.round(totalStock / sampleRatio) : totalStock,
-        lowStockProducts: sampleRatio < 1 ? Math.round(lowStockProducts / sampleRatio) : lowStockProducts,
-        outOfStockProducts: sampleRatio < 1 ? Math.round(outOfStockProducts / sampleRatio) : outOfStockProducts,
-        totalValue: sampleRatio < 1 ? Math.round(totalValue / sampleRatio) : totalValue,
+        totalStock,
+        lowStockProducts,
+        outOfStockProducts,
+        totalValue,
         recentMovements: 0,
       };
     } catch (error) {
@@ -468,16 +450,54 @@ class ApiService {
     }
   }
 
+  // Get products with recent movements (sorted by update date)
+  async getRecentMovementProducts(): Promise<(Product & { movementType: 'entry' | 'exit' })[]> {
+    const config = this.getConfig();
+    
+    if (!config?.baseUrl || !config?.token) {
+      return [];
+    }
+
+    try {
+      // Fetch products ordered by update date
+      const data = await this.fetchWithAuth(`/catalog?limit=20&offset=0&page=1&search=&categoryId=0&suplierId=&brand=&orderBy=updatedAt%7Cdesc`);
+      
+      let products: any[] = [];
+      if (Array.isArray(data)) {
+        products = data;
+      } else if (data?.results) {
+        products = data.results;
+      } else if (data?.data) {
+        products = data.data;
+      } else if (data?.products) {
+        products = data.products;
+      } else if (data?.items) {
+        products = data.items;
+      }
+
+      const transformed = products.slice(0, 8).map(item => {
+        const p = this.transformWedropProduct(item);
+        // Determine movement type based on available data
+        const movementType: 'entry' | 'exit' = (p.soldQuantity && p.soldQuantity > 0) ? 'exit' : 'entry';
+        return { ...p, movementType };
+      });
+      
+      return transformed;
+    } catch (error) {
+      console.error('Error fetching recent products:', error);
+      return [];
+    }
+  }
+
   // Get stock trend data for charts
   async getStockTrendData(): Promise<{ date: string; stock: number; value: number }[]> {
-    // Since the API doesn't have historical data, we'll create simulated trend based on current data
-    const { products } = await this.getAllProductsStats();
+    const allProducts = await this.getAllProductsForStats();
     
     // Create last 7 days of data based on current values with slight variations
     const days = 7;
     const data = [];
-    const totalStock = products.reduce((acc, p) => acc + p.stock, 0);
-    const totalValue = products.reduce((acc, p) => acc + (p.price * p.stock), 0);
+    const totalStock = allProducts.reduce((acc, p) => acc + p.stock, 0);
+    const totalValue = allProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
     
     for (let i = days - 1; i >= 0; i--) {
       const date = new Date();
@@ -495,11 +515,11 @@ class ApiService {
 
   // Get top selling products for chart
   async getTopSellingProducts(): Promise<{ name: string; sales: number; stock: number }[]> {
-    const { products } = await this.getAllProductsStats();
+    const allProducts = await this.getAllProductsForStats();
     
     // Sort by sales score and get top 5
-    const scored = products.map(p => ({
-      name: p.name.substring(0, 30) + (p.name.length > 30 ? '...' : ''),
+    const scored = allProducts.map(p => ({
+      name: p.name.substring(0, 25) + (p.name.length > 25 ? '...' : ''),
       sales: (p.avgSellsQuantityPast30Days ?? 0) * 30 + (p.soldQuantity ?? 0),
       stock: p.stock,
     }));
@@ -509,11 +529,11 @@ class ApiService {
 
   // Get stock distribution by category
   async getCategoryDistribution(): Promise<{ name: string; value: number; stock: number }[]> {
-    const { products } = await this.getAllProductsStats();
+    const allProducts = await this.getAllProductsForStats();
     
     const categoryMap = new Map<string, { value: number; stock: number }>();
     
-    products.forEach(p => {
+    allProducts.forEach(p => {
       const current = categoryMap.get(p.category) || { value: 0, stock: 0 };
       categoryMap.set(p.category, {
         value: current.value + (p.price * p.stock),

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, RefreshCw, DollarSign, TrendingUp, TrendingDown, Calendar, FileText, ArrowUpRight, ArrowDownRight, Pencil, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, DollarSign, TrendingUp, TrendingDown, Calendar, FileText, ArrowUpRight, ArrowDownRight, Pencil, Trash2, Tags, PieChart, BarChart3 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -12,9 +12,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { format, startOfMonth, endOfMonth, isAfter, isBefore, parseISO, isSameMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isAfter, isBefore, parseISO, isSameMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
 interface AccountPayable {
   id: string;
@@ -54,27 +54,38 @@ interface CashFlowEntry {
   payment_method: string | null;
 }
 
+interface FinancialCategory {
+  id: string;
+  name: string;
+  type: 'expense' | 'income';
+  description: string | null;
+}
+
 const PAYMENT_METHODS = [
   'Dinheiro', 'PIX', 'Cartão de Crédito', 'Cartão de Débito', 
   'Boleto', 'Transferência', 'Cheque'
 ];
 
-const CATEGORIES_PAYABLE = [
+const DEFAULT_CATEGORIES_EXPENSE = [
   'Fornecedores', 'Aluguel', 'Energia', 'Internet', 'Água',
-  'Salários', 'Impostos', 'Marketing', 'Frete', 'Taxas Marketplace', 'Outros'
+  'Salários', 'Impostos', 'Marketing', 'Frete', 'Taxas Marketplace', 'Taxa de Cartão', 'Outros'
 ];
 
-const CATEGORIES_RECEIVABLE = [
+const DEFAULT_CATEGORIES_INCOME = [
   'Vendas Amazon', 'Vendas Mercado Livre', 'Vendas Diretas', 
   'Serviços', 'Outros'
 ];
+
+const CHART_COLORS = ['hsl(205, 90%, 45%)', 'hsl(142, 71%, 45%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 50%)', 'hsl(280, 60%, 50%)', 'hsl(180, 60%, 45%)'];
 
 export default function Financial() {
   const [payables, setPayables] = useState<AccountPayable[]>([]);
   const [receivables, setReceivables] = useState<AccountReceivable[]>([]);
   const [cashFlow, setCashFlow] = useState<CashFlowEntry[]>([]);
+  const [customCategories, setCustomCategories] = useState<FinancialCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'payable' | 'receivable'>('payable');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -88,14 +99,20 @@ export default function Financial() {
     notes: '',
     document_number: '',
   });
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    type: 'expense' as 'expense' | 'income',
+    description: '',
+  });
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [payablesRes, receivablesRes, cashFlowRes] = await Promise.all([
+      const [payablesRes, receivablesRes, cashFlowRes, categoriesRes] = await Promise.all([
         supabase.from('accounts_payable').select('*').order('due_date', { ascending: true }),
         supabase.from('accounts_receivable').select('*').order('due_date', { ascending: true }),
         supabase.from('cash_flow').select('*').order('date', { ascending: false }).limit(100),
+        supabase.from('financial_accounts').select('*').order('name'),
       ]);
 
       if (payablesRes.data) {
@@ -119,6 +136,10 @@ export default function Financial() {
       if (cashFlowRes.data) {
         setCashFlow(cashFlowRes.data as CashFlowEntry[]);
       }
+
+      if (categoriesRes.data) {
+        setCustomCategories(categoriesRes.data as FinancialCategory[]);
+      }
     } catch (error) {
       console.error('Error loading financial data:', error);
       toast.error('Erro ao carregar dados financeiros');
@@ -131,15 +152,30 @@ export default function Financial() {
     loadData();
   }, []);
 
+  // Get categories based on type
+  const getCategories = (type: 'payable' | 'receivable') => {
+    const customCats = customCategories.filter(c => 
+      type === 'payable' ? c.type === 'expense' : c.type === 'income'
+    ).map(c => c.name);
+    
+    const defaults = type === 'payable' ? DEFAULT_CATEGORIES_EXPENSE : DEFAULT_CATEGORIES_INCOME;
+    return [...new Set([...defaults, ...customCats])];
+  };
+
   const handleSubmit = async () => {
     if (!formData.description || !formData.amount || !formData.due_date) {
       toast.error('Preencha os campos obrigatórios');
       return;
     }
 
+    // Validate payment method for receivables
+    if (modalType === 'receivable' && !formData.payment_method) {
+      toast.error('Forma de pagamento é obrigatória para contas a receber');
+      return;
+    }
+
     try {
       if (editingId) {
-        // Update existing
         if (modalType === 'payable') {
           const { error } = await supabase.from('accounts_payable').update({
             description: formData.description,
@@ -160,7 +196,7 @@ export default function Financial() {
             amount: parseFloat(formData.amount),
             due_date: formData.due_date,
             customer: formData.customer || null,
-            payment_method: formData.payment_method || null,
+            payment_method: formData.payment_method,
             category: formData.category || null,
             notes: formData.notes || null,
             document_number: formData.document_number || null,
@@ -170,7 +206,6 @@ export default function Financial() {
           toast.success('Conta a receber atualizada!');
         }
       } else {
-        // Create new
         if (modalType === 'payable') {
           const { error } = await supabase.from('accounts_payable').insert({
             description: formData.description,
@@ -192,7 +227,7 @@ export default function Financial() {
             amount: parseFloat(formData.amount),
             due_date: formData.due_date,
             customer: formData.customer || null,
-            payment_method: formData.payment_method || null,
+            payment_method: formData.payment_method,
             category: formData.category || null,
             notes: formData.notes || null,
             document_number: formData.document_number || null,
@@ -211,6 +246,30 @@ export default function Financial() {
     } catch (error) {
       console.error('Error saving entry:', error);
       toast.error('Erro ao salvar registro');
+    }
+  };
+
+  const handleSaveCategory = async () => {
+    if (!categoryFormData.name) {
+      toast.error('Nome da categoria é obrigatório');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('financial_accounts').insert({
+        name: categoryFormData.name,
+        type: categoryFormData.type,
+        description: categoryFormData.description || null,
+      });
+
+      if (error) throw error;
+      toast.success('Categoria criada!');
+      setCategoryModalOpen(false);
+      setCategoryFormData({ name: '', type: 'expense', description: '' });
+      loadData();
+    } catch (error) {
+      console.error('Error saving category:', error);
+      toast.error('Erro ao salvar categoria');
     }
   };
 
@@ -424,6 +483,32 @@ export default function Financial() {
     };
   });
 
+  // Monthly comparison data for charts
+  const last6Months = Array.from({ length: 6 }, (_, i) => {
+    const date = subMonths(new Date(), 5 - i);
+    return {
+      month: format(date, 'MMM', { locale: ptBR }),
+      start: startOfMonth(date),
+      end: endOfMonth(date),
+    };
+  });
+
+  const monthlyComparisonData = last6Months.map(({ month, start, end }) => {
+    const monthEntries = cashFlow.filter(c => {
+      const d = parseISO(c.date);
+      return (isAfter(d, start) || isSameMonth(d, start)) && (isBefore(d, end) || isSameMonth(d, end));
+    });
+    const income = monthEntries.filter(c => c.type === 'income').reduce((a, c) => a + c.amount, 0);
+    const expense = monthEntries.filter(c => c.type === 'expense').reduce((a, c) => a + c.amount, 0);
+    return { month, income, expense, result: income - expense };
+  });
+
+  // Expense distribution for pie chart
+  const expensePieData = Object.entries(expensesByCategory).map(([name, value]) => ({
+    name,
+    value,
+  })).sort((a, b) => b.value - a.value).slice(0, 6);
+
   return (
     <MainLayout>
       <PageHeader
@@ -431,6 +516,10 @@ export default function Financial() {
         description="Controle de contas a pagar e receber"
       >
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setCategoryModalOpen(true)} className="gap-2">
+            <Tags className="w-4 h-4" />
+            <span className="hidden sm:inline">Categorias</span>
+          </Button>
           <Button variant="outline" size="icon" onClick={loadData} disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
@@ -438,68 +527,150 @@ export default function Financial() {
       </PageHeader>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 mb-6 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-card rounded-xl p-5 border border-border shadow-sm">
+      <div className="grid gap-3 sm:gap-4 mb-6 grid-cols-2 lg:grid-cols-4">
+        <div className="bg-card rounded-xl p-4 sm:p-5 border border-border shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <div className="p-2 rounded-lg bg-destructive/10">
               <ArrowDownRight className="w-4 h-4 text-destructive" />
             </div>
             <span className="text-sm font-medium text-muted-foreground">A Pagar</span>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatCurrency(totalPayable)}</p>
+          <p className="text-xl sm:text-2xl font-bold text-foreground">{formatCurrency(totalPayable)}</p>
           {overduePayable > 0 && (
             <p className="text-xs text-destructive mt-1">{overduePayable} vencido(s)</p>
           )}
         </div>
-        <div className="bg-card rounded-xl p-5 border border-border shadow-sm">
+        <div className="bg-card rounded-xl p-4 sm:p-5 border border-border shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <div className="p-2 rounded-lg bg-success/10">
               <ArrowUpRight className="w-4 h-4 text-success" />
             </div>
             <span className="text-sm font-medium text-muted-foreground">A Receber</span>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatCurrency(totalReceivable)}</p>
+          <p className="text-xl sm:text-2xl font-bold text-foreground">{formatCurrency(totalReceivable)}</p>
           {overdueReceivable > 0 && (
             <p className="text-xs text-warning mt-1">{overdueReceivable} vencido(s)</p>
           )}
         </div>
-        <div className="bg-card rounded-xl p-5 border border-border shadow-sm">
+        <div className="bg-card rounded-xl p-4 sm:p-5 border border-border shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <div className="p-2 rounded-lg bg-primary/10">
               <DollarSign className="w-4 h-4 text-primary" />
             </div>
             <span className="text-sm font-medium text-muted-foreground">Saldo Previsto</span>
           </div>
-          <p className={`text-2xl font-bold ${totalReceivable - totalPayable >= 0 ? 'text-success' : 'text-destructive'}`}>
+          <p className={`text-xl sm:text-2xl font-bold ${totalReceivable - totalPayable >= 0 ? 'text-success' : 'text-destructive'}`}>
             {formatCurrency(totalReceivable - totalPayable)}
           </p>
         </div>
-        <div className="bg-card rounded-xl p-5 border border-border shadow-sm">
+        <div className="bg-card rounded-xl p-4 sm:p-5 border border-border shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <div className="p-2 rounded-lg bg-chart-1/10">
               <FileText className="w-4 h-4 text-chart-1" />
             </div>
             <span className="text-sm font-medium text-muted-foreground">Resultado do Mês</span>
           </div>
-          <p className={`text-2xl font-bold ${monthResult >= 0 ? 'text-success' : 'text-destructive'}`}>
+          <p className={`text-xl sm:text-2xl font-bold ${monthResult >= 0 ? 'text-success' : 'text-destructive'}`}>
             {formatCurrency(monthResult)}
           </p>
         </div>
       </div>
 
+      {/* Charts Row */}
+      <div className="grid gap-4 sm:gap-6 mb-6 lg:grid-cols-2">
+        {/* Monthly Comparison */}
+        <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm sm:text-base">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              Comparativo Mensal
+            </h3>
+          </div>
+          <div className="h-[180px] sm:h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyComparisonData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                  formatter={(value: number, name: string) => [
+                    formatCurrency(value),
+                    name === 'income' ? 'Receita' : name === 'expense' ? 'Despesa' : 'Resultado'
+                  ]}
+                />
+                <Bar dataKey="income" fill="hsl(var(--success))" name="income" />
+                <Bar dataKey="expense" fill="hsl(var(--destructive))" name="expense" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Expense Distribution */}
+        <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm sm:text-base">
+              <PieChart className="w-4 h-4 text-warning" />
+              Distribuição de Despesas
+            </h3>
+          </div>
+          <div className="h-[180px] sm:h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <RechartsPieChart>
+                <Pie
+                  data={expensePieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={35}
+                  outerRadius={60}
+                  paddingAngle={2}
+                >
+                  {expensePieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                  formatter={(value: number) => formatCurrency(value)}
+                />
+              </RechartsPieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex flex-wrap gap-2 justify-center mt-2">
+            {expensePieData.slice(0, 4).map((item, index) => (
+              <div key={item.name} className="flex items-center gap-1 text-xs">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }} />
+                <span className="text-muted-foreground truncate max-w-[60px]">{item.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <Tabs defaultValue="payables" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-4">
-          <TabsTrigger value="payables">Contas a Pagar</TabsTrigger>
-          <TabsTrigger value="receivables">Contas a Receber</TabsTrigger>
-          <TabsTrigger value="cashflow">Fluxo de Caixa</TabsTrigger>
-          <TabsTrigger value="dre">DRE</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-4 gap-1">
+          <TabsTrigger value="payables" className="text-xs sm:text-sm">Contas a Pagar</TabsTrigger>
+          <TabsTrigger value="receivables" className="text-xs sm:text-sm">Contas a Receber</TabsTrigger>
+          <TabsTrigger value="cashflow" className="text-xs sm:text-sm">Fluxo de Caixa</TabsTrigger>
+          <TabsTrigger value="dre" className="text-xs sm:text-sm">DRE</TabsTrigger>
         </TabsList>
 
         <TabsContent value="payables">
           <div className="flex justify-end mb-4">
             <Button onClick={() => openModal('payable')} className="gap-2">
               <Plus className="w-4 h-4" />
-              Nova Conta a Pagar
+              <span className="hidden sm:inline">Nova Conta a Pagar</span>
+              <span className="sm:hidden">Nova</span>
             </Button>
           </div>
           <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
@@ -507,32 +678,32 @@ export default function Financial() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Descrição</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Fornecedor</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Valor</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Vencimento</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Ações</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Descrição</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden sm:table-cell">Fornecedor</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Valor</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Vencimento</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Status</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {payables.map((item) => (
                     <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 font-medium text-foreground">{item.description}</td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{item.supplier || '-'}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-destructive">{formatCurrency(item.amount)}</td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(item.due_date)}</td>
-                      <td className="px-4 py-3">{getStatusBadge(item.status, 'payable')}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 sm:px-4 py-3 font-medium text-foreground text-sm">{item.description}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">{item.supplier || '-'}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm font-semibold text-destructive">{formatCurrency(item.amount)}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{formatDate(item.due_date)}</td>
+                      <td className="px-3 sm:px-4 py-3">{getStatusBadge(item.status, 'payable')}</td>
+                      <td className="px-3 sm:px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(item, 'payable')}>
-                            <Pencil className="w-4 h-4" />
+                          <Button size="icon" variant="ghost" className="h-7 w-7 sm:h-8 sm:w-8" onClick={() => handleEdit(item, 'payable')}>
+                            <Pencil className="w-3 h-3 sm:w-4 sm:h-4" />
                           </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDelete(item.id, 'payable')}>
-                            <Trash2 className="w-4 h-4" />
+                          <Button size="icon" variant="ghost" className="h-7 w-7 sm:h-8 sm:w-8 text-destructive" onClick={() => handleDelete(item.id, 'payable')}>
+                            <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                           </Button>
                           {(item.status === 'pending' || item.status === 'overdue') && (
-                            <Button size="sm" variant="outline" onClick={() => handleMarkAsPaid(item.id, 'payable')}>
+                            <Button size="sm" variant="outline" className="h-7 sm:h-8 text-xs" onClick={() => handleMarkAsPaid(item.id, 'payable')}>
                               Pagar
                             </Button>
                           )}
@@ -556,7 +727,8 @@ export default function Financial() {
           <div className="flex justify-end mb-4">
             <Button onClick={() => openModal('receivable')} className="gap-2">
               <Plus className="w-4 h-4" />
-              Nova Conta a Receber
+              <span className="hidden sm:inline">Nova Conta a Receber</span>
+              <span className="sm:hidden">Nova</span>
             </Button>
           </div>
           <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
@@ -564,32 +736,32 @@ export default function Financial() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Descrição</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Cliente</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Valor</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Vencimento</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Ações</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Descrição</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden sm:table-cell">Cliente</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Valor</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Vencimento</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Status</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {receivables.map((item) => (
                     <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 font-medium text-foreground">{item.description}</td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{item.customer || '-'}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-success">{formatCurrency(item.amount)}</td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(item.due_date)}</td>
-                      <td className="px-4 py-3">{getStatusBadge(item.status, 'receivable')}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 sm:px-4 py-3 font-medium text-foreground text-sm">{item.description}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">{item.customer || '-'}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm font-semibold text-success">{formatCurrency(item.amount)}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{formatDate(item.due_date)}</td>
+                      <td className="px-3 sm:px-4 py-3">{getStatusBadge(item.status, 'receivable')}</td>
+                      <td className="px-3 sm:px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEdit(item, 'receivable')}>
-                            <Pencil className="w-4 h-4" />
+                          <Button size="icon" variant="ghost" className="h-7 w-7 sm:h-8 sm:w-8" onClick={() => handleEdit(item, 'receivable')}>
+                            <Pencil className="w-3 h-3 sm:w-4 sm:h-4" />
                           </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDelete(item.id, 'receivable')}>
-                            <Trash2 className="w-4 h-4" />
+                          <Button size="icon" variant="ghost" className="h-7 w-7 sm:h-8 sm:w-8 text-destructive" onClick={() => handleDelete(item.id, 'receivable')}>
+                            <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                           </Button>
                           {(item.status === 'pending' || item.status === 'overdue') && (
-                            <Button size="sm" variant="outline" onClick={() => handleMarkAsPaid(item.id, 'receivable')}>
+                            <Button size="sm" variant="outline" className="h-7 sm:h-8 text-xs" onClick={() => handleMarkAsPaid(item.id, 'receivable')}>
                               Receber
                             </Button>
                           )}
@@ -611,24 +783,24 @@ export default function Financial() {
 
         <TabsContent value="cashflow">
           {/* Cash Flow Chart */}
-          <div className="bg-card rounded-xl border border-border p-5 mb-6 shadow-sm">
-            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+          <div className="bg-card rounded-xl border border-border p-4 sm:p-5 mb-6 shadow-sm">
+            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2 text-sm sm:text-base">
               <TrendingUp className="w-4 h-4 text-primary" />
               Fluxo de Caixa - Últimos 30 dias
             </h3>
-            <div className="h-[250px]">
+            <div className="h-[200px] sm:h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={cashFlowChartData}>
+                <AreaChart data={cashFlowChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis 
                     dataKey="date" 
                     tickFormatter={(v) => format(parseISO(v), 'dd/MM')}
-                    tick={{ fontSize: 10 }}
+                    tick={{ fontSize: 9 }}
                     stroke="hsl(var(--muted-foreground))"
-                    interval={4}
+                    interval={6}
                   />
                   <YAxis 
-                    tick={{ fontSize: 11 }}
+                    tick={{ fontSize: 10 }}
                     stroke="hsl(var(--muted-foreground))"
                     tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
                   />
@@ -644,9 +816,9 @@ export default function Financial() {
                     ]}
                     labelFormatter={(label) => format(parseISO(label), 'dd/MM/yyyy')}
                   />
-                  <Bar dataKey="income" fill="hsl(var(--success))" name="income" />
-                  <Bar dataKey="expense" fill="hsl(var(--destructive))" name="expense" />
-                </BarChart>
+                  <Area type="monotone" dataKey="income" stroke="hsl(var(--success))" fill="hsl(var(--success))" fillOpacity={0.2} name="income" />
+                  <Area type="monotone" dataKey="expense" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.2} name="expense" />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
@@ -656,25 +828,25 @@ export default function Financial() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Data</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Tipo</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Descrição</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Categoria</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Valor</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Data</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Tipo</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Descrição</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Categoria</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Valor</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {cashFlow.map((item) => (
                     <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(item.date)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 sm:px-4 py-3 text-sm text-muted-foreground">{formatDate(item.date)}</td>
+                      <td className="px-3 sm:px-4 py-3">
                         <Badge variant="outline" className={item.type === 'income' ? 'bg-success/10 text-success border-success/20' : 'bg-destructive/10 text-destructive border-destructive/20'}>
                           {item.type === 'income' ? 'Entrada' : 'Saída'}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 font-medium text-foreground">{item.description}</td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{item.category || '-'}</td>
-                      <td className={`px-4 py-3 text-sm font-semibold ${item.type === 'income' ? 'text-success' : 'text-destructive'}`}>
+                      <td className="px-3 sm:px-4 py-3 font-medium text-foreground text-sm">{item.description}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{item.category || '-'}</td>
+                      <td className={`px-3 sm:px-4 py-3 text-sm font-semibold ${item.type === 'income' ? 'text-success' : 'text-destructive'}`}>
                         {item.type === 'income' ? '+' : '-'}{formatCurrency(item.amount)}
                       </td>
                     </tr>
@@ -692,7 +864,7 @@ export default function Financial() {
         </TabsContent>
 
         <TabsContent value="dre">
-          <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
+          <div className="bg-card rounded-xl border border-border p-4 sm:p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-foreground mb-6 flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
               Demonstrativo de Resultado - {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
@@ -743,8 +915,8 @@ export default function Financial() {
               
               {/* Resultado */}
               <div className="flex justify-between items-center py-4 px-4 bg-primary/10 rounded-xl border border-primary/20">
-                <span className="text-lg font-bold text-foreground">RESULTADO DO PERÍODO</span>
-                <span className={`text-2xl font-bold ${monthResult >= 0 ? 'text-success' : 'text-destructive'}`}>
+                <span className="text-base sm:text-lg font-bold text-foreground">RESULTADO DO PERÍODO</span>
+                <span className={`text-xl sm:text-2xl font-bold ${monthResult >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {formatCurrency(monthResult)}
                 </span>
               </div>
@@ -759,7 +931,7 @@ export default function Financial() {
 
       {/* Modal for new/edit entry */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingId ? 'Editar' : 'Nova'} {modalType === 'payable' ? 'Conta a Pagar' : 'Conta a Receber'}
@@ -824,14 +996,16 @@ export default function Financial() {
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(modalType === 'payable' ? CATEGORIES_PAYABLE : CATEGORIES_RECEIVABLE).map(cat => (
+                    {getCategories(modalType).map((cat) => (
                       <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label htmlFor="payment_method">Forma de Pagamento</Label>
+                <Label htmlFor="payment_method">
+                  Forma de Pagamento {modalType === 'receivable' && '*'}
+                </Label>
                 <Select 
                   value={formData.payment_method} 
                   onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
@@ -840,7 +1014,7 @@ export default function Financial() {
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAYMENT_METHODS.map(method => (
+                    {PAYMENT_METHODS.map((method) => (
                       <SelectItem key={method} value={method}>{method}</SelectItem>
                     ))}
                   </SelectContent>
@@ -849,12 +1023,12 @@ export default function Financial() {
             </div>
 
             <div>
-              <Label htmlFor="document">Nº Documento</Label>
+              <Label htmlFor="document_number">Número do Documento</Label>
               <Input
-                id="document"
+                id="document_number"
                 value={formData.document_number}
                 onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
-                placeholder="Número da NF, boleto, etc"
+                placeholder="Ex: NF-001"
               />
             </div>
 
@@ -864,15 +1038,93 @@ export default function Financial() {
                 id="notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Anotações adicionais"
-                rows={2}
+                placeholder="Observações adicionais..."
+                rows={3}
               />
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSubmit}>{editingId ? 'Salvar' : 'Criar'}</Button>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmit}>
+              {editingId ? 'Salvar' : 'Criar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Modal */}
+      <Dialog open={categoryModalOpen} onOpenChange={setCategoryModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gerenciar Categorias</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="cat_name">Nome da Categoria *</Label>
+              <Input
+                id="cat_name"
+                value={categoryFormData.name}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+                placeholder="Ex: Taxa de Cartão"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="cat_type">Tipo *</Label>
+              <Select 
+                value={categoryFormData.type} 
+                onValueChange={(value: 'expense' | 'income') => setCategoryFormData({ ...categoryFormData, type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="expense">Despesa (Contas a Pagar)</SelectItem>
+                  <SelectItem value="income">Receita (Contas a Receber)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="cat_description">Descrição</Label>
+              <Input
+                id="cat_description"
+                value={categoryFormData.description}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
+                placeholder="Descrição opcional"
+              />
+            </div>
+
+            {customCategories.length > 0 && (
+              <div className="mt-4">
+                <Label>Categorias Personalizadas</Label>
+                <div className="mt-2 space-y-2 max-h-32 overflow-y-auto">
+                  {customCategories.map(cat => (
+                    <div key={cat.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                      <div>
+                        <span className="text-sm font-medium">{cat.name}</span>
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          {cat.type === 'expense' ? 'Despesa' : 'Receita'}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCategoryModalOpen(false)}>
+              Fechar
+            </Button>
+            <Button onClick={handleSaveCategory}>
+              Criar Categoria
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
