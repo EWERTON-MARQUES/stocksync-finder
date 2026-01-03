@@ -8,23 +8,6 @@ export interface ProductImage {
   key?: string;
 }
 
-export interface SupplierCorporate {
-  id?: number;
-  suplierId?: number;
-  corporateName?: string;
-  employerNumber?: string;
-  stateRegistration?: string;
-  cityRegistration?: string;
-  zipCode?: string;
-  address?: string;
-  number?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
-  complement?: string;
-  status?: string;
-}
-
 export interface Product {
   id: string;
   sku: string;
@@ -37,8 +20,6 @@ export interface Product {
   price: number;
   costPrice: number;
   priceCostWithTaxes?: number;
-  specialPriceA?: number | null;
-  specialPriceB?: number | null;
   stock: number;
   reservedQuantity?: number;
   minStock: number;
@@ -51,11 +32,8 @@ export interface Product {
   supplierState?: string;
   supplierCnpj?: string;
   supplierCorporateName?: string;
-  supplierCorporate?: SupplierCorporate;
   brand?: string;
   barcode?: string;
-  ean?: string;
-  suplierEan?: string;
   ncm?: string;
   cest?: string;
   origin?: string;
@@ -68,7 +46,6 @@ export interface Product {
   imageUrl?: string;
   images?: ProductImage[];
   videoLink?: string;
-  ytVideo?: string;
   createdAt: string;
   updatedAt: string;
   isSelling?: boolean;
@@ -76,11 +53,6 @@ export interface Product {
   avgSellsQuantityPast15Days?: number | null;
   avgSellsQuantityPast30Days?: number | null;
   soldQuantity?: number | null;
-  multiplicadorFaturamento?: number;
-  agrupadorKit?: string | null;
-  shopeeCategoryId?: number | null;
-  catalogId?: number | null;
-  wedrop2Id?: number | null;
 }
 
 export interface StockMovement {

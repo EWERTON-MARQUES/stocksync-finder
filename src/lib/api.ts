@@ -115,24 +115,6 @@ class ApiService {
     // Get cover image
     const coverImage = item.images?.find((img: any) => img.isCover) || item.images?.[0];
 
-    // Build supplier corporate object
-    const supplierCorporate = item.suplierCorporate ? {
-      id: item.suplierCorporate.id,
-      suplierId: item.suplierCorporate.suplierId,
-      corporateName: item.suplierCorporate.corporateName,
-      employerNumber: item.suplierCorporate.employerNumber,
-      stateRegistration: item.suplierCorporate.stateRegistration,
-      cityRegistration: item.suplierCorporate.cityRegistration,
-      zipCode: item.suplierCorporate.zipCode,
-      address: item.suplierCorporate.address,
-      number: item.suplierCorporate.number,
-      neighborhood: item.suplierCorporate.neighborhood,
-      city: item.suplierCorporate.city,
-      state: item.suplierCorporate.state,
-      complement: item.suplierCorporate.complement,
-      status: item.suplierCorporate.status,
-    } : undefined;
-
     return {
       id: String(item.id),
       sku: item.sku || item.code || `SKU-${item.id}`,
@@ -145,8 +127,6 @@ class ApiService {
       price: Number(item.price) || Number(item.sale_price) || 0,
       costPrice: Number(item.cost) || Number(item.cost_price) || Number(item.costPrice) || 0,
       priceCostWithTaxes: Number(item.priceCostWithTaxes) || 0,
-      specialPriceA: item.specialPriceA ?? null,
-      specialPriceB: item.specialPriceB ?? null,
       stock: stock,
       reservedQuantity: item.reservedQuantity ?? 0,
       minStock: minStock,
@@ -154,16 +134,13 @@ class ApiService {
       unit: item.unit || 'un',
       unitsByBox: item.unitsByBox ?? 1,
       status: status,
-      supplier: item.suplier?.name?.trim() || item.supplier?.name || item.supplierName || 'N/A',
+      supplier: item.suplier?.name || item.supplier?.name || item.supplierName || 'N/A',
       supplierId: item.suplierId,
       supplierState: item.suplierCorporate?.state || item.suplierCorporateState || '',
       supplierCnpj: item.suplierCorporate?.employerNumber || '',
       supplierCorporateName: item.suplierCorporate?.corporateName || '',
-      supplierCorporate: supplierCorporate,
       brand: item.brand || '',
       barcode: item.ean || item.barcode || item.gtin || '',
-      ean: item.ean || '',
-      suplierEan: item.suplierEan || '',
       ncm: item.ncm || '',
       cest: item.cest || '',
       origin: item.origin || '',
@@ -177,8 +154,7 @@ class ApiService {
         : undefined,
       imageUrl: coverImage?.lg || coverImage?.md || item.image || item.imageUrl,
       images: item.images || [],
-      videoLink: item.videoLink || '',
-      ytVideo: item.ytVideo || '',
+      videoLink: item.videoLink || item.ytVideo || '',
       createdAt: item.created_at || item.createdAt || new Date().toISOString(),
       updatedAt: item.updated_at || item.updatedAt || new Date().toISOString(),
       isSelling: item.isSelling ?? true,
@@ -186,11 +162,6 @@ class ApiService {
       avgSellsQuantityPast15Days: item.avgSellsQuantityPast15Days,
       avgSellsQuantityPast30Days: item.avgSellsQuantityPast30Days,
       soldQuantity: item.soldQuantity,
-      multiplicadorFaturamento: item.multiplicador_faturamento ?? 1,
-      agrupadorKit: item.agrupador_kit ?? null,
-      shopeeCategoryId: item.shopeeCategoryId ?? null,
-      catalogId: item.catalogId ?? null,
-      wedrop2Id: item.wedrop2Id ?? null,
     };
   }
 
