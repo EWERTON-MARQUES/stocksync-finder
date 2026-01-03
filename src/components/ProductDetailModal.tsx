@@ -10,10 +10,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 import { 
   Package, ArrowLeft, Download, 
   TrendingUp, TrendingDown, History, Store, 
-  ChevronLeft, ChevronRight, Play, FileText, ShoppingBag
+  ChevronLeft, ChevronRight, Play, FileText, ShoppingBag,
+  Building2, MapPin, Barcode, Scale, Box, Tag, Calendar, Truck
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -42,7 +44,6 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
         .then(setMovements)
         .finally(() => setLoadingMovements(false));
       
-      // Load marketplace data
       supabase.from('product_marketplaces').select('*').eq('product_id', product.id).maybeSingle()
         .then(({ data }) => {
           setAmazon(data?.amazon || false);
@@ -82,7 +83,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
     }).format(value);
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDateFull = (dateString: string) => {
     try {
       return format(new Date(dateString), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
     } catch {
@@ -108,7 +109,6 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
 
   const images = product.images || [];
   const currentImage = images[selectedImage]?.xl || images[selectedImage]?.lg || images[selectedImage]?.md || product.imageUrl;
-
   const activeMarketplaces = [amazon && 'Amazon', mercadoLivre && 'Mercado Livre'].filter(Boolean);
 
   return (
@@ -158,7 +158,6 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                     </div>
                   )}
                   
-                  {/* Image Navigation */}
                   {images.length > 1 && (
                     <>
                       <Button 
@@ -212,12 +211,10 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                   <h1 className="text-xl sm:text-2xl lg:text-2xl font-bold text-foreground leading-tight mb-2">
                     {product.name}
                   </h1>
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-medium">SKU:</span> {product.sku}
-                    {product.barcode && (
-                      <> <span className="mx-2">|</span> <span className="font-medium">EAN:</span> {product.barcode}</>
-                    )}
-                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                    <span><span className="font-medium">SKU:</span> {product.sku}</span>
+                    {product.barcode && <span><span className="font-medium">EAN:</span> {product.barcode}</span>}
+                  </div>
                 </div>
 
                 {/* Price */}
@@ -239,16 +236,16 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                 {/* Quick Info */}
                 <div className="space-y-2 text-sm">
                   <div className="flex">
-                    <span className="text-muted-foreground w-32">Categoria:</span>
+                    <span className="text-muted-foreground w-36">Categoria:</span>
                     <span className="text-primary font-medium">{product.category}</span>
                   </div>
                   <div className="flex">
-                    <span className="text-muted-foreground w-32">Fornecedor:</span>
+                    <span className="text-muted-foreground w-36">Fornecedor:</span>
                     <span className="text-foreground font-medium">{product.supplier}</span>
                   </div>
                   {product.supplierState && (
                     <div className="flex">
-                      <span className="text-muted-foreground w-32">Estado de origem:</span>
+                      <span className="text-muted-foreground w-36">Estado de origem:</span>
                       <span className="text-foreground">{product.supplierState}</span>
                     </div>
                   )}
@@ -256,17 +253,16 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
 
                 {/* Technical Specs Box */}
                 <div className="bg-card rounded-xl border border-border p-4">
-                  <h3 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">
+                  <h3 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide flex items-center gap-2">
+                    <Box className="w-4 h-4 text-primary" />
                     Especificações Técnicas
                   </h3>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                     {product.brand && (
-                      <>
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase">Marca</p>
-                          <p className="font-medium text-foreground">{product.brand}</p>
-                        </div>
-                      </>
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase">Marca</p>
+                        <p className="font-medium text-foreground">{product.brand}</p>
+                      </div>
                     )}
                     {product.ncm && (
                       <div>
@@ -298,12 +294,25 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                         <p className="font-medium text-foreground">{product.length}cm</p>
                       </div>
                     )}
+                    {product.boxWeight !== undefined && product.boxWeight > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase">Peso Caixa</p>
+                        <p className="font-medium text-foreground">{product.boxWeight}g</p>
+                      </div>
+                    )}
+                    {product.unitsByBox !== undefined && product.unitsByBox > 1 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase">Unid. por Caixa</p>
+                        <p className="font-medium text-foreground">{product.unitsByBox}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Supplier Box */}
                 <div className="bg-card rounded-xl border border-border p-4">
-                  <h3 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">
+                  <h3 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-primary" />
                     Fornecedor
                   </h3>
                   <div className="space-y-2 text-sm">
@@ -323,12 +332,166 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                         <span className="font-medium text-foreground">{product.supplierState}</span>
                       </div>
                     )}
+                    {product.supplierCorporate?.stateRegistration && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Inscrição Estadual</span>
+                        <span className="font-medium text-foreground font-mono text-xs">{product.supplierCorporate.stateRegistration}</span>
+                      </div>
+                    )}
+                    {product.supplierCorporate?.city && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Cidade</span>
+                        <span className="font-medium text-foreground">{product.supplierCorporate.city}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-4 pt-3 border-t border-border">
+                  <Separator className="my-3" />
+                  <div>
                     <p className="text-xs text-muted-foreground uppercase mb-1">Histórico de Vendas</p>
                     <p className="text-sm text-success font-medium">
                       {product.soldQuantity ? `+${product.soldQuantity}` : '+1000'} vendas em parceria com a WeDrop
                     </p>
+                  </div>
+                </div>
+
+                {/* Stock & Pricing */}
+                <div className="bg-card rounded-xl border border-border p-4">
+                  <h3 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-primary" />
+                    Estoque e Preços
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-success/10 rounded-lg p-3 text-center border border-success/20">
+                      <p className="text-xs text-muted-foreground mb-1">Disponível</p>
+                      <p className="text-xl font-bold text-success">{product.stock}</p>
+                    </div>
+                    <div className="bg-warning/10 rounded-lg p-3 text-center border border-warning/20">
+                      <p className="text-xs text-muted-foreground mb-1">Reservado</p>
+                      <p className="text-xl font-bold text-warning">{product.reservedQuantity ?? 0}</p>
+                    </div>
+                    <div className="bg-muted/30 rounded-lg p-3 text-center border border-border">
+                      <p className="text-xs text-muted-foreground mb-1">Preço Custo</p>
+                      <p className="text-lg font-bold text-foreground">{formatCurrency(product.costPrice)}</p>
+                    </div>
+                    <div className="bg-primary/10 rounded-lg p-3 text-center border border-primary/20">
+                      <p className="text-xs text-muted-foreground mb-1">Custo + Impostos</p>
+                      <p className="text-lg font-bold text-primary">{formatCurrency(product.priceCostWithTaxes || 0)}</p>
+                    </div>
+                  </div>
+
+                  {/* Sales Averages */}
+                  {(product.avgSellsQuantityPast7Days || product.avgSellsQuantityPast15Days || product.avgSellsQuantityPast30Days) && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <p className="text-xs text-muted-foreground uppercase mb-3 flex items-center gap-2">
+                        <TrendingUp className="w-3 h-3" />
+                        Média de Vendas
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="text-center p-2 bg-muted/20 rounded-lg">
+                          <p className="text-lg font-bold text-foreground">{product.avgSellsQuantityPast7Days ?? 0}</p>
+                          <p className="text-xs text-muted-foreground">7 dias</p>
+                        </div>
+                        <div className="text-center p-2 bg-muted/20 rounded-lg">
+                          <p className="text-lg font-bold text-foreground">{product.avgSellsQuantityPast15Days ?? 0}</p>
+                          <p className="text-xs text-muted-foreground">15 dias</p>
+                        </div>
+                        <div className="text-center p-2 bg-muted/20 rounded-lg">
+                          <p className="text-lg font-bold text-foreground">{product.avgSellsQuantityPast30Days ?? 0}</p>
+                          <p className="text-xs text-muted-foreground">30 dias</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Info Cards */}
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+              {/* Fiscal Info */}
+              <div className="bg-card rounded-xl border border-border p-4">
+                <h3 className="font-semibold text-foreground mb-3 text-sm uppercase tracking-wide flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-primary" />
+                  Informações Fiscais
+                </h3>
+                <div className="space-y-2 text-sm">
+                  {product.fiscalName && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Nome Fiscal</p>
+                      <p className="font-medium text-foreground text-xs">{product.fiscalName}</p>
+                    </div>
+                  )}
+                  {product.ncm && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">NCM</span>
+                      <span className="font-mono text-foreground">{product.ncm}</span>
+                    </div>
+                  )}
+                  {product.cest && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">CEST</span>
+                      <span className="font-mono text-foreground">{product.cest}</span>
+                    </div>
+                  )}
+                  {product.origin && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Origem</span>
+                      <span className="text-foreground">{product.origin}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Codes & IDs */}
+              <div className="bg-card rounded-xl border border-border p-4">
+                <h3 className="font-semibold text-foreground mb-3 text-sm uppercase tracking-wide flex items-center gap-2">
+                  <Barcode className="w-4 h-4 text-primary" />
+                  Códigos e Identificadores
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">ID</span>
+                    <span className="font-mono text-foreground">{product.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">SKU</span>
+                    <span className="font-mono text-foreground">{product.sku}</span>
+                  </div>
+                  {product.skuSuplier && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">SKU Fornecedor</span>
+                      <span className="font-mono text-foreground text-xs">{product.skuSuplier}</span>
+                    </div>
+                  )}
+                  {product.ean && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">EAN</span>
+                      <span className="font-mono text-foreground text-xs">{product.ean}</span>
+                    </div>
+                  )}
+                  {product.wedrop2Id && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Wedrop ID</span>
+                      <span className="font-mono text-foreground">{product.wedrop2Id}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="bg-card rounded-xl border border-border p-4">
+                <h3 className="font-semibold text-foreground mb-3 text-sm uppercase tracking-wide flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  Datas
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Criado em</span>
+                    <span className="text-foreground text-xs">{formatDateFull(product.createdAt)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Atualizado em</span>
+                    <span className="text-foreground text-xs">{formatDateFull(product.updatedAt)}</span>
                   </div>
                 </div>
               </div>
@@ -337,7 +500,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
             {/* Tabs Section */}
             <div className="mt-8">
               <Tabs defaultValue="description" className="w-full">
-                <TabsList className="w-full justify-start border-b border-border rounded-none bg-transparent p-0 h-auto">
+                <TabsList className="w-full justify-start border-b border-border rounded-none bg-transparent p-0 h-auto flex-wrap">
                   <TabsTrigger 
                     value="description"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none px-4 py-3 text-sm font-medium"
@@ -386,7 +549,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                       <Store className="w-5 h-5 text-primary" />
                       <h3 className="font-semibold text-foreground">Onde está vendendo este produto?</h3>
                     </div>
-                    <div className="flex flex-wrap gap-6">
+                    <div className="flex flex-wrap gap-4">
                       <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-muted/20 hover:bg-muted/40 transition-colors">
                         <Checkbox 
                           id="amazon" 
@@ -422,9 +585,9 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                           <thead>
                             <tr className="border-b border-border">
                               <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tipo</th>
-                              <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quantidade</th>
-                              <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Estoque Anterior</th>
-                              <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Estoque Novo</th>
+                              <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Qtd</th>
+                              <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Anterior</th>
+                              <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Novo</th>
                               <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">Motivo</th>
                               <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Data</th>
                               <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Hora</th>
@@ -494,7 +657,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
             </div>
 
             {/* Video Section */}
-            {product.videoLink && (
+            {(product.videoLink || product.ytVideo) && (
               <div className="mt-8 bg-card rounded-xl border border-border p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <Play className="w-5 h-5 text-primary" />
@@ -502,7 +665,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                 </div>
                 <div className="aspect-video rounded-lg overflow-hidden max-w-3xl">
                   <iframe
-                    src={product.videoLink.replace('watch?v=', 'embed/')}
+                    src={(product.videoLink || product.ytVideo || '').replace('watch?v=', 'embed/')}
                     title="Vídeo do produto"
                     className="w-full h-full"
                     allowFullScreen
