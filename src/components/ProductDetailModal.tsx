@@ -8,15 +8,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Package, Truck, Scale, Ruler, Barcode, Calendar, DollarSign, Box, Tag, 
-  TrendingUp, TrendingDown, ArrowUpDown, History, ShoppingCart, Store, Download, FileText, ChevronLeft, ChevronRight
+  TrendingUp, TrendingDown, ArrowUpDown, History, ShoppingCart, Store, Download, FileText, ChevronLeft, ChevronRight, Play
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -124,8 +124,8 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[95vh] overflow-hidden flex flex-col p-0">
-        <DialogHeader className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
+      <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-0">
+        <DialogHeader className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-3 sm:pb-4 border-b border-border">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
             <Button variant="ghost" size="sm" className="gap-1 h-7 px-2" onClick={() => onOpenChange(false)}>
               <ChevronLeft className="w-4 h-4" />
@@ -136,9 +136,9 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
         </DialogHeader>
 
         <ScrollArea className="flex-1">
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {/* Main Content Grid */}
-            <div className="grid lg:grid-cols-2 gap-8">
+            <div className="grid lg:grid-cols-2 gap-6 lg:gap-8">
               {/* Left Side - Images */}
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -147,7 +147,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                   </span>
                   <Button variant="outline" size="sm" className="gap-2">
                     <Download className="w-4 h-4" />
-                    Baixar Todas
+                    <span className="hidden sm:inline">Baixar Todas</span>
                   </Button>
                 </div>
                 
@@ -193,7 +193,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                       <button
                         key={idx}
                         onClick={() => setSelectedImage(idx)}
-                        className={`shrink-0 w-16 h-16 rounded-lg border-2 overflow-hidden transition-all ${
+                        className={`shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-lg border-2 overflow-hidden transition-all ${
                           idx === selectedImage ? 'border-primary' : 'border-border hover:border-primary/50'
                         }`}
                       >
@@ -210,21 +210,26 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
 
               {/* Right Side - Product Info */}
               <div>
-                <h1 className="text-2xl font-bold text-foreground mb-3">{product.name}</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-foreground mb-3">{product.name}</h1>
                 
-                <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 mb-4 text-sm text-muted-foreground">
                   <span>SKU: <span className="font-mono text-foreground">{product.sku}</span></span>
                   <span className="text-border">|</span>
                   <span>EAN: <span className="font-mono text-foreground">{product.barcode || '-'}</span></span>
                 </div>
 
-                <div className="text-3xl font-bold text-primary mb-4">
+                <div className="text-2xl sm:text-3xl font-bold text-primary mb-4">
                   {formatCurrency(product.price)}
                 </div>
 
-                <Badge className={`mb-4 ${product.stock > 0 ? 'bg-success text-success-foreground' : 'bg-destructive text-destructive-foreground'}`}>
-                  {product.stock > 0 ? 'DISPONÍVEL' : 'INDISPONÍVEL'}
-                </Badge>
+                <div className="flex items-center gap-2 mb-4">
+                  <Badge className={`${product.stock > 0 ? 'bg-success text-success-foreground' : 'bg-destructive text-destructive-foreground'}`}>
+                    {product.stock > 0 ? 'DISPONÍVEL' : 'INDISPONÍVEL'}
+                  </Badge>
+                  <Badge variant="outline" className="text-foreground">
+                    Estoque: {product.stock} {product.unit}
+                  </Badge>
+                </div>
 
                 <div className="space-y-2 mb-6 text-sm">
                   <div className="flex items-center gap-2">
@@ -241,38 +246,18 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                       <span className="font-medium text-foreground">{product.supplierState}</span>
                     </div>
                   )}
-                </div>
-
-                {/* Marketplace Selection */}
-                <div className="p-4 bg-muted/30 rounded-xl border border-border mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Store className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-semibold text-foreground">Onde está vendendo?</span>
-                  </div>
-                  <div className="flex gap-6">
+                  {product.brand && (
                     <div className="flex items-center gap-2">
-                      <Checkbox 
-                        id="amazon" 
-                        checked={amazon} 
-                        onCheckedChange={(v) => handleMarketplaceChange('amazon', !!v)} 
-                      />
-                      <Label htmlFor="amazon" className="text-sm cursor-pointer">Amazon</Label>
+                      <span className="text-muted-foreground">Marca:</span>
+                      <span className="font-medium text-foreground">{product.brand}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox 
-                        id="ml" 
-                        checked={mercadoLivre} 
-                        onCheckedChange={(v) => handleMarketplaceChange('mercado_livre', !!v)} 
-                      />
-                      <Label htmlFor="ml" className="text-sm cursor-pointer">Mercado Livre</Label>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Technical Specs */}
-                <div className="bg-card rounded-xl border border-border p-4 mb-6">
+                <div className="bg-card rounded-xl border border-border p-4 mb-4">
                   <h3 className="font-semibold text-foreground mb-4">Especificações Técnicas</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wide">Marca</p>
                       <p className="font-medium text-foreground">{product.brand || '-'}</p>
@@ -301,12 +286,12 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                 </div>
 
                 {/* Supplier Info */}
-                <div className="bg-card rounded-xl border border-border p-4">
+                <div className="bg-card rounded-xl border border-border p-4 mb-4">
                   <h3 className="font-semibold text-foreground mb-4">Fornecedor</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Vendido por</span>
-                      <span className="font-medium text-foreground">{product.supplier}</span>
+                      <span className="font-medium text-foreground">{product.supplierCorporateName || product.supplier}</span>
                     </div>
                     {product.supplierCnpj && (
                       <div className="flex justify-between">
@@ -322,29 +307,59 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                     )}
                   </div>
                 </div>
+
+                {/* Marketplace Selection */}
+                <div className="p-4 bg-muted/30 rounded-xl border border-border">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Store className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-semibold text-foreground">Onde está vendendo?</span>
+                  </div>
+                  <div className="flex gap-6">
+                    <div className="flex items-center gap-2">
+                      <Checkbox 
+                        id="amazon" 
+                        checked={amazon} 
+                        onCheckedChange={(v) => handleMarketplaceChange('amazon', !!v)} 
+                      />
+                      <Label htmlFor="amazon" className="text-sm cursor-pointer">Amazon</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox 
+                        id="ml" 
+                        checked={mercadoLivre} 
+                        onCheckedChange={(v) => handleMarketplaceChange('mercado_livre', !!v)} 
+                      />
+                      <Label htmlFor="ml" className="text-sm cursor-pointer">Mercado Livre</Label>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Tabs Section */}
             <div className="mt-8">
               <Tabs defaultValue="descricao">
-                <TabsList className="grid w-full grid-cols-3 max-w-lg">
-                  <TabsTrigger value="descricao" className="gap-2">
-                    <FileText className="w-4 h-4" />
-                    Descrição
+                <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-2xl gap-1">
+                  <TabsTrigger value="descricao" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+                    <FileText className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span>Descrição</span>
                   </TabsTrigger>
-                  <TabsTrigger value="estoque" className="gap-2">
-                    <Box className="w-4 h-4" />
-                    Estoque
+                  <TabsTrigger value="estoque" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+                    <Box className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span>Estoque</span>
                   </TabsTrigger>
-                  <TabsTrigger value="historico" className="gap-2">
-                    <History className="w-4 h-4" />
-                    Histórico de Estoque
+                  <TabsTrigger value="videos" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+                    <Play className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span>Vídeos</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="historico" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+                    <History className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span>Movimentação</span>
                   </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="descricao" className="mt-6">
-                  <div className="bg-card rounded-xl border border-border p-6">
+                  <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
                     {product.description ? (
                       <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
                         {product.description}
@@ -358,25 +373,25 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                 </TabsContent>
 
                 <TabsContent value="estoque" className="mt-6">
-                  <div className="bg-card rounded-xl border border-border p-6">
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                      <div className="bg-success/10 rounded-xl p-4 text-center border border-success/20">
+                  <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                      <div className="bg-success/10 rounded-xl p-3 sm:p-4 text-center border border-success/20">
                         <p className="text-xs text-muted-foreground font-medium mb-1">Disponível</p>
-                        <p className="text-3xl font-bold text-success">{product.stock}</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-success">{product.stock}</p>
                         <p className="text-xs text-muted-foreground">{product.unit}</p>
                       </div>
-                      <div className="bg-warning/10 rounded-xl p-4 text-center border border-warning/20">
+                      <div className="bg-warning/10 rounded-xl p-3 sm:p-4 text-center border border-warning/20">
                         <p className="text-xs text-muted-foreground font-medium mb-1">Reservado</p>
-                        <p className="text-3xl font-bold text-warning">{product.reservedQuantity ?? 0}</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-warning">{product.reservedQuantity ?? 0}</p>
                         <p className="text-xs text-muted-foreground">{product.unit}</p>
                       </div>
-                      <div className="bg-primary/10 rounded-xl p-4 text-center border border-primary/20">
+                      <div className="bg-primary/10 rounded-xl p-3 sm:p-4 text-center border border-primary/20">
                         <p className="text-xs text-muted-foreground font-medium mb-1">Preço Custo</p>
-                        <p className="text-2xl font-bold text-primary">{formatCurrency(product.costPrice)}</p>
+                        <p className="text-xl sm:text-2xl font-bold text-primary">{formatCurrency(product.costPrice)}</p>
                       </div>
-                      <div className="bg-muted rounded-xl p-4 text-center border border-border">
+                      <div className="bg-muted rounded-xl p-3 sm:p-4 text-center border border-border">
                         <p className="text-xs text-muted-foreground font-medium mb-1">Valor em Estoque</p>
-                        <p className="text-2xl font-bold text-foreground">{formatCurrency(product.price * product.stock)}</p>
+                        <p className="text-xl sm:text-2xl font-bold text-foreground">{formatCurrency(product.price * product.stock)}</p>
                       </div>
                     </div>
 
@@ -389,15 +404,15 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                         </h4>
                         <div className="grid grid-cols-3 gap-3">
                           <div className="text-center p-3 bg-muted/30 rounded-lg border border-border">
-                            <p className="text-2xl font-bold text-foreground">{product.avgSellsQuantityPast7Days ?? 0}</p>
+                            <p className="text-xl sm:text-2xl font-bold text-foreground">{product.avgSellsQuantityPast7Days ?? 0}</p>
                             <p className="text-xs text-muted-foreground">Últimos 7 dias</p>
                           </div>
                           <div className="text-center p-3 bg-muted/30 rounded-lg border border-border">
-                            <p className="text-2xl font-bold text-foreground">{product.avgSellsQuantityPast15Days ?? 0}</p>
+                            <p className="text-xl sm:text-2xl font-bold text-foreground">{product.avgSellsQuantityPast15Days ?? 0}</p>
                             <p className="text-xs text-muted-foreground">Últimos 15 dias</p>
                           </div>
                           <div className="text-center p-3 bg-muted/30 rounded-lg border border-border">
-                            <p className="text-2xl font-bold text-foreground">{product.avgSellsQuantityPast30Days ?? 0}</p>
+                            <p className="text-xl sm:text-2xl font-bold text-foreground">{product.avgSellsQuantityPast30Days ?? 0}</p>
                             <p className="text-xs text-muted-foreground">Últimos 30 dias</p>
                           </div>
                         </div>
@@ -406,8 +421,28 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                   </div>
                 </TabsContent>
 
+                <TabsContent value="videos" className="mt-6">
+                  <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
+                    {product.videoLink ? (
+                      <div className="aspect-video rounded-lg overflow-hidden">
+                        <iframe
+                          src={product.videoLink.replace('watch?v=', 'embed/')}
+                          title="Vídeo do produto"
+                          className="w-full h-full"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : (
+                      <div className="py-12 text-center">
+                        <Play className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                        <p className="text-muted-foreground">Nenhum vídeo disponível para este produto</p>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
                 <TabsContent value="historico" className="mt-6">
-                  <div className="bg-card rounded-xl border border-border p-6">
+                  <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
                     <h4 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
                       <History className="w-4 h-4 text-primary" />
                       Histórico de Movimentação
@@ -422,9 +457,9 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                         {movements.map((movement) => (
                           <div 
                             key={movement.id} 
-                            className="flex items-center gap-4 p-4 bg-muted/20 rounded-lg border border-border hover:border-primary/30 transition-colors"
+                            className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-muted/20 rounded-lg border border-border hover:border-primary/30 transition-colors"
                           >
-                            <div className="shrink-0 p-2 rounded-full bg-background">
+                            <div className="shrink-0 p-2 rounded-full bg-background self-start sm:self-center">
                               {getMovementIcon(movement.type)}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -454,7 +489,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onMarketplaceU
                                 {movement.reason}
                               </p>
                             </div>
-                            <div className="text-right shrink-0">
+                            <div className="text-left sm:text-right shrink-0">
                               <p className="text-xs text-muted-foreground">
                                 {formatDate(movement.createdAt)}
                               </p>

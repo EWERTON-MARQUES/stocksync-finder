@@ -40,8 +40,7 @@ export default function ABCCurve() {
     setLoading(true);
     try {
       // Fetch all products to calculate ABC curve
-      const result = await apiService.getAllProductsStats();
-      const allProducts = result.products;
+      const allProducts = await apiService.getAllProductsForStats();
 
       // Calculate sales score based on available API data
       // Using avgSellsQuantityPast30Days, soldQuantity, and movement frequency

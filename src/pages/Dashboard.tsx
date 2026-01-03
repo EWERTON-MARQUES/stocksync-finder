@@ -30,9 +30,8 @@ export default function Dashboard() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsData, productsResult, trendData, topData, catData] = await Promise.all([
+      const [statsData, trendData, topData, catData] = await Promise.all([
         apiService.getDashboardStats(),
-        apiService.getProducts(1, 20),
         apiService.getStockTrendData(),
         apiService.getTopSellingProducts(),
         apiService.getCategoryDistribution(),
@@ -42,18 +41,10 @@ export default function Dashboard() {
       setTopProducts(topData);
       setCategoryData(catData);
       
-      // Get products with recent movements (using update dates as proxy)
-      const sortedByUpdate = [...productsResult.products].sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      );
+      // Get products with recent movements (ordered by update date from API)
+      const recentProducts = await apiService.getRecentMovementProducts();
+      setMovementProducts(recentProducts);
       
-      // Add movement info based on available data
-      const productsWithMovement: ProductWithMovement[] = sortedByUpdate.slice(0, 8).map(p => ({
-        ...p,
-        movementType: (p.soldQuantity && p.soldQuantity > 0) ? 'exit' : 'entry',
-      }));
-      
-      setMovementProducts(productsWithMovement);
       setLastUpdate(new Date());
     } finally {
       setLoading(false);
@@ -122,7 +113,7 @@ export default function Dashboard() {
       </PageHeader>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 mb-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 sm:gap-4 mb-6 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard
           title="Total de Produtos"
           value={formatNumber(stats?.totalProducts || 0)}
@@ -148,7 +139,7 @@ export default function Dashboard() {
           iconClassName="bg-destructive/10 text-destructive"
         />
         <StatCard
-          title="Valor Total"
+          title="Valor em Estoque"
           value={formatCurrency(stats?.totalValue || 0)}
           icon={DollarSign}
           iconClassName="bg-chart-1/10 text-chart-1"
@@ -162,28 +153,28 @@ export default function Dashboard() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid gap-6 mb-6 lg:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 mb-6 lg:grid-cols-2">
         {/* Stock Trend Chart */}
-        <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
+        <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm sm:text-base">
               <TrendingUp className="w-4 h-4 text-primary" />
               Tendência de Estoque
             </h3>
             <Badge variant="outline" className="text-xs">Últimos 7 dias</Badge>
           </div>
-          <div className="h-[200px]">
+          <div className="h-[180px] sm:h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={stockTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis 
                   dataKey="date" 
                   tickFormatter={formatShortDate}
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 10 }}
                   stroke="hsl(var(--muted-foreground))"
                 />
                 <YAxis 
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 10 }}
                   stroke="hsl(var(--muted-foreground))"
                   tickFormatter={(v) => formatNumber(v)}
                 />
@@ -201,8 +192,8 @@ export default function Dashboard() {
                   dataKey="stock" 
                   stroke="hsl(var(--primary))" 
                   strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--primary))', r: 4 }}
-                  activeDot={{ r: 6 }}
+                  dot={{ fill: 'hsl(var(--primary))', r: 3 }}
+                  activeDot={{ r: 5 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -210,23 +201,23 @@ export default function Dashboard() {
         </div>
 
         {/* Top Products Chart */}
-        <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
+        <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm sm:text-base">
               <BarChart3 className="w-4 h-4 text-success" />
               Top Produtos (Vendas)
             </h3>
           </div>
-          <div className="h-[200px]">
+          <div className="h-[180px] sm:h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topProducts} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                <XAxis type="number" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                 <YAxis 
                   dataKey="name" 
                   type="category" 
-                  width={100} 
-                  tick={{ fontSize: 10 }}
+                  width={80} 
+                  tick={{ fontSize: 9 }}
                   stroke="hsl(var(--muted-foreground))"
                 />
                 <Tooltip
@@ -245,28 +236,28 @@ export default function Dashboard() {
       </div>
 
       {/* Second Charts Row */}
-      <div className="grid gap-6 mb-6 lg:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 mb-6 lg:grid-cols-2">
         {/* Value Trend Chart */}
-        <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
+        <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm sm:text-base">
               <DollarSign className="w-4 h-4 text-warning" />
               Valor do Estoque
             </h3>
             <Badge variant="outline" className="text-xs">Últimos 7 dias</Badge>
           </div>
-          <div className="h-[200px]">
+          <div className="h-[180px] sm:h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={stockTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis 
                   dataKey="date" 
                   tickFormatter={formatShortDate}
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 10 }}
                   stroke="hsl(var(--muted-foreground))"
                 />
                 <YAxis 
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 10 }}
                   stroke="hsl(var(--muted-foreground))"
                   tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
                 />
@@ -284,8 +275,8 @@ export default function Dashboard() {
                   dataKey="value" 
                   stroke="hsl(var(--warning))" 
                   strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--warning))', r: 4 }}
-                  activeDot={{ r: 6 }}
+                  dot={{ fill: 'hsl(var(--warning))', r: 3 }}
+                  activeDot={{ r: 5 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -293,14 +284,14 @@ export default function Dashboard() {
         </div>
 
         {/* Category Distribution */}
-        <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
+        <div className="bg-card rounded-xl border border-border p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm sm:text-base">
               <Package className="w-4 h-4 text-chart-1" />
               Distribuição por Categoria
             </h3>
           </div>
-          <div className="h-[200px]">
+          <div className="h-[180px] sm:h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -309,8 +300,8 @@ export default function Dashboard() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius={40}
-                  outerRadius={70}
+                  innerRadius={35}
+                  outerRadius={60}
                   paddingAngle={2}
                 >
                   {categoryData.map((entry, index) => (
@@ -335,7 +326,7 @@ export default function Dashboard() {
                   className="w-2 h-2 rounded-full" 
                   style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
                 />
-                <span className="text-muted-foreground truncate max-w-[80px]">{item.name}</span>
+                <span className="text-muted-foreground truncate max-w-[60px] sm:max-w-[80px]">{item.name}</span>
               </div>
             ))}
           </div>
@@ -344,10 +335,10 @@ export default function Dashboard() {
 
       {/* Products with Latest Movements */}
       <div className="bg-card rounded-xl border border-border shadow-sm animate-fade-in">
-        <div className="flex items-center justify-between p-5 border-b border-border">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-border">
           <div>
-            <h2 className="font-semibold text-foreground">Produtos com Últimas Movimentações</h2>
-            <p className="text-sm text-muted-foreground">Produtos atualizados recentemente na API</p>
+            <h2 className="font-semibold text-foreground text-sm sm:text-base">Produtos com Últimas Movimentações</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">Produtos com entradas e saídas recentes</p>
           </div>
           <Link
             to="/catalogo"
@@ -361,22 +352,22 @@ export default function Dashboard() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <th className="px-3 sm:px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Produto
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <th className="px-3 sm:px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">
                   SKU
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <th className="px-3 sm:px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Movimentação
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <th className="px-3 sm:px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Estoque
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <th className="px-3 sm:px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">
                   Preço
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <th className="px-3 sm:px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">
                   Status
                 </th>
               </tr>
@@ -384,27 +375,27 @@ export default function Dashboard() {
             <tbody className="divide-y divide-border">
               {movementProducts.map((product) => (
                 <tr key={product.id} className="table-row-hover">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
+                  <td className="px-3 sm:px-5 py-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                       {product.imageUrl && (
                         <img 
                           src={product.imageUrl} 
                           alt={product.name}
-                          className="w-10 h-10 rounded-lg object-cover border border-border"
+                          className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-cover border border-border"
                         />
                       )}
                       <Link
                         to={`/catalogo`}
-                        className="font-medium text-foreground hover:text-primary transition-colors line-clamp-1 max-w-[200px]"
+                        className="font-medium text-foreground hover:text-primary transition-colors line-clamp-1 max-w-[120px] sm:max-w-[200px] text-sm"
                       >
                         {product.name}
                       </Link>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-sm text-muted-foreground font-mono">
+                  <td className="px-3 sm:px-5 py-3 text-sm text-muted-foreground font-mono hidden sm:table-cell">
                     {product.sku}
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-3 sm:px-5 py-3">
                     <Badge 
                       variant="outline" 
                       className={
@@ -420,7 +411,7 @@ export default function Dashboard() {
                       )}
                     </Badge>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-3 sm:px-5 py-3">
                     <div className="flex items-center gap-2">
                       <span className={`text-sm font-bold ${
                         product.stock === 0 
@@ -431,13 +422,12 @@ export default function Dashboard() {
                       }`}>
                         {product.stock}
                       </span>
-                      <span className="text-xs text-muted-foreground">{product.unit}</span>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-sm font-semibold text-foreground">
+                  <td className="px-3 sm:px-5 py-3 text-sm font-semibold text-foreground hidden md:table-cell">
                     {formatCurrency(product.price)}
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-3 sm:px-5 py-3 hidden lg:table-cell">
                     <StatusBadge status={product.status} />
                   </td>
                 </tr>
@@ -445,6 +435,12 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
+        {movementProducts.length === 0 && (
+          <div className="py-12 text-center">
+            <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-muted-foreground">Nenhuma movimentação recente</p>
+          </div>
+        )}
       </div>
     </MainLayout>
   );

@@ -46,7 +46,7 @@ export default function Catalog() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortByStock, setSortByStock] = useState<'asc' | 'desc' | null>(null);
   const [marketplaceData, setMarketplaceData] = useState<MarketplaceData>({});
-  const limit = 50;
+  const [limit, setLimit] = useState(50);
 
   // Load marketplace data
   const loadMarketplaceData = async () => {
@@ -73,21 +73,23 @@ export default function Catalog() {
     loadMarketplaceData();
   }, []);
 
-  const loadProducts = useCallback(async (page: number, search: string, currentFilters: CatalogFilters) => {
+  const loadProducts = useCallback(async (page: number, search: string, currentFilters: CatalogFilters, currentLimit: number, sort: 'asc' | 'desc' | null) => {
     setLoading(true);
     try {
-      const data = await apiService.getProducts(page, limit, search, currentFilters);
+      // Build filters with sortBy if stock sort is active
+      const filtersWithSort = {
+        ...currentFilters,
+        sortBy: sort === 'desc' ? 'stock_desc' : sort === 'asc' ? 'stock_asc' : undefined
+      };
       
-      // Sort by stock if enabled
-      if (sortByStock) {
-        data.products.sort((a, b) => sortByStock === 'desc' ? b.stock - a.stock : a.stock - b.stock);
-      }
+      const data = await apiService.getProducts(page, currentLimit, search, filtersWithSort);
       
-      // Apply marketplace filter
+      // Apply marketplace filter client-side
+      let filteredProducts = data.products;
       if (currentFilters.marketplace && currentFilters.marketplace !== 'all') {
-        data.products = data.products.filter(p => {
+        filteredProducts = filteredProducts.filter(p => {
           const mp = marketplaceData[p.id];
-          if (!mp) return false;
+          if (!mp) return currentFilters.marketplace === 'none';
           if (currentFilters.marketplace === 'amazon') return mp.amazon;
           if (currentFilters.marketplace === 'mercado_livre') return mp.mercado_livre;
           if (currentFilters.marketplace === 'both') return mp.amazon && mp.mercado_livre;
@@ -95,23 +97,36 @@ export default function Catalog() {
         });
       }
       
-      setPaginatedData(data);
+      // Client-side stock sort as fallback
+      if (sort) {
+        filteredProducts.sort((a, b) => sort === 'desc' ? b.stock - a.stock : a.stock - b.stock);
+      }
+      
+      // Recalculate total pages based on actual total
+      const totalPages = Math.ceil(data.total / currentLimit);
+      
+      setPaginatedData({
+        ...data,
+        products: filteredProducts,
+        totalPages,
+        limit: currentLimit
+      });
     } finally {
       setLoading(false);
     }
-  }, [sortByStock, marketplaceData]);
+  }, [marketplaceData]);
 
   useEffect(() => {
-    loadProducts(currentPage, searchQuery, filters);
-  }, [currentPage, filters, loadProducts, sortByStock]);
+    loadProducts(currentPage, searchQuery, filters, limit, sortByStock);
+  }, [currentPage, filters, limit, sortByStock, loadProducts]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setCurrentPage(1);
-      loadProducts(1, searchQuery, filters);
+      loadProducts(1, searchQuery, filters, limit, sortByStock);
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchQuery, loadProducts, filters]);
+  }, [searchQuery, loadProducts, filters, limit, sortByStock]);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
@@ -119,11 +134,15 @@ export default function Catalog() {
     if (page >= 1 && page <= paginatedData.totalPages) setCurrentPage(page);
   };
 
-  const handleRefresh = () => loadProducts(currentPage, searchQuery, filters);
+  const handleRefresh = () => loadProducts(currentPage, searchQuery, filters, limit, sortByStock);
 
-  const clearFilters = () => { setFilters({}); setCurrentPage(1); };
+  const clearFilters = () => { 
+    setFilters({}); 
+    setSortByStock(null);
+    setCurrentPage(1); 
+  };
 
-  const activeFiltersCount = Object.values(filters).filter(v => v && v !== 'all').length;
+  const activeFiltersCount = Object.values(filters).filter(v => v && v !== 'all').length + (sortByStock ? 1 : 0);
 
   const getMarketplaceBadges = (productId: string) => {
     const mp = marketplaceData[productId];
@@ -156,6 +175,12 @@ export default function Catalog() {
     return pages;
   };
 
+  const handleLimitChange = (newLimit: string) => {
+    const l = parseInt(newLimit);
+    setLimit(l);
+    setCurrentPage(1);
+  };
+
   return (
     <MainLayout>
       <PageHeader title="Catálogo de Produtos" description="Gerencie seu inventário de produtos">
@@ -163,7 +188,7 @@ export default function Catalog() {
           <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button variant="default" className="gap-2 bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/25">
+          <Button variant="default" className="gap-2 bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/25 hidden sm:flex">
             <Package className="w-4 h-4" />
             Novo Produto
           </Button>
@@ -178,14 +203,15 @@ export default function Catalog() {
         
         <Button variant={sortByStock === 'desc' ? 'default' : 'outline'} onClick={() => setSortByStock(sortByStock === 'desc' ? null : 'desc')} className="gap-2">
           {sortByStock === 'desc' ? <ArrowDown className="w-4 h-4" /> : <ArrowUp className="w-4 h-4" />}
-          Maior Estoque
+          <span className="hidden sm:inline">Maior Estoque</span>
+          <span className="sm:hidden">Estoque</span>
         </Button>
         
         <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" className="gap-2 h-11 relative">
               <Filter className="w-4 h-4" />
-              Filtros
+              <span className="hidden sm:inline">Filtros</span>
               {activeFiltersCount > 0 && <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs bg-primary">{activeFiltersCount}</Badge>}
             </Button>
           </PopoverTrigger>
@@ -237,6 +263,7 @@ export default function Catalog() {
                       <SelectItem value="amazon">Amazon</SelectItem>
                       <SelectItem value="mercado_livre">Mercado Livre</SelectItem>
                       <SelectItem value="both">Ambos</SelectItem>
+                      <SelectItem value="none">Nenhum</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -247,10 +274,25 @@ export default function Catalog() {
         </Popover>
       </div>
 
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           {paginatedData.total > 0 ? <>Mostrando <span className="font-semibold text-foreground">{((currentPage - 1) * limit) + 1}</span> - <span className="font-semibold text-foreground">{Math.min(currentPage * limit, paginatedData.total)}</span> de <span className="font-semibold text-foreground">{paginatedData.total.toLocaleString('pt-BR')}</span> produtos</> : 'Nenhum produto encontrado'}
         </p>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Por página:</span>
+          <Select value={String(limit)} onValueChange={handleLimitChange}>
+            <SelectTrigger className="h-8 w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+              <SelectItem value="200">200</SelectItem>
+              <SelectItem value="500">500</SelectItem>
+              <SelectItem value="1000">1000</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {loading ? (
@@ -267,32 +309,32 @@ export default function Catalog() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
-                    <th className="px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Produto</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">SKU</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Categoria</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Estoque</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Preço</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Vendendo</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Status</th>
+                    <th className="px-3 sm:px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Produto</th>
+                    <th className="px-3 sm:px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase hidden sm:table-cell">SKU</th>
+                    <th className="px-3 sm:px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase hidden md:table-cell">Categoria</th>
+                    <th className="px-3 sm:px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Estoque</th>
+                    <th className="px-3 sm:px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Preço</th>
+                    <th className="px-3 sm:px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase hidden lg:table-cell">Vendendo</th>
+                    <th className="px-3 sm:px-4 py-4 text-left text-xs font-semibold text-muted-foreground uppercase hidden sm:table-cell">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {paginatedData.products.map((product) => (
                     <tr key={product.id} className={`table-row-hover group cursor-pointer hover:bg-primary/5 ${isSelling(product.id) ? 'bg-success/5' : ''}`} onClick={() => { setSelectedProduct(product); setModalOpen(true); }}>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="w-10 h-10 rounded-lg object-cover border border-border" /> : <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center"><Image className="w-5 h-5 text-muted-foreground" /></div>}
-                          <span className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-1">{product.name}</span>
+                      <td className="px-3 sm:px-4 py-4">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-cover border border-border" /> : <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-muted flex items-center justify-center"><Image className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" /></div>}
+                          <span className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-2 text-sm sm:text-base max-w-[150px] sm:max-w-[250px]">{product.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-sm text-muted-foreground font-mono">{product.sku}</td>
-                      <td className="px-4 py-4 text-sm text-muted-foreground">{product.category}</td>
-                      <td className="px-4 py-4">
+                      <td className="px-3 sm:px-4 py-4 text-sm text-muted-foreground font-mono hidden sm:table-cell">{product.sku}</td>
+                      <td className="px-3 sm:px-4 py-4 text-sm text-muted-foreground hidden md:table-cell">{product.category}</td>
+                      <td className="px-3 sm:px-4 py-4">
                         <span className={`text-sm font-bold ${product.stock === 0 ? 'text-destructive' : product.stock <= 80 ? 'text-warning' : 'text-success'}`}>{product.stock}</span>
                       </td>
-                      <td className="px-4 py-4 text-sm font-semibold text-foreground">{formatCurrency(product.price)}</td>
-                      <td className="px-4 py-4">{getMarketplaceBadges(product.id) || <span className="text-xs text-muted-foreground">-</span>}</td>
-                      <td className="px-4 py-4"><StatusBadge status={product.status} /></td>
+                      <td className="px-3 sm:px-4 py-4 text-sm font-semibold text-foreground">{formatCurrency(product.price)}</td>
+                      <td className="px-3 sm:px-4 py-4 hidden lg:table-cell">{getMarketplaceBadges(product.id) || <span className="text-xs text-muted-foreground">-</span>}</td>
+                      <td className="px-3 sm:px-4 py-4 hidden sm:table-cell"><StatusBadge status={product.status} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -303,14 +345,14 @@ export default function Catalog() {
           {paginatedData.totalPages > 1 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
               <p className="text-sm text-muted-foreground">Página {currentPage} de {paginatedData.totalPages}</p>
-              <div className="flex items-center gap-1">
-                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => goToPage(1)} disabled={currentPage === 1}><ChevronsLeft className="w-4 h-4" /></Button>
-                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1}><ChevronLeft className="w-4 h-4" /></Button>
+              <div className="flex items-center gap-1 flex-wrap justify-center">
+                <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => goToPage(1)} disabled={currentPage === 1}><ChevronsLeft className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1}><ChevronLeft className="w-4 h-4" /></Button>
                 {renderPageNumbers().map((page, i) => typeof page === 'number' ? (
-                  <Button key={i} variant={page === currentPage ? 'default' : 'outline'} size="icon" className="h-9 w-9" onClick={() => goToPage(page)}>{page}</Button>
-                ) : <span key={i} className="px-2 text-muted-foreground">...</span>)}
-                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => goToPage(currentPage + 1)} disabled={currentPage === paginatedData.totalPages}><ChevronRight className="w-4 h-4" /></Button>
-                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => goToPage(paginatedData.totalPages)} disabled={currentPage === paginatedData.totalPages}><ChevronsRight className="w-4 h-4" /></Button>
+                  <Button key={i} variant={page === currentPage ? 'default' : 'outline'} size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => goToPage(page)}>{page}</Button>
+                ) : <span key={i} className="px-1 sm:px-2 text-muted-foreground">...</span>)}
+                <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => goToPage(currentPage + 1)} disabled={currentPage === paginatedData.totalPages}><ChevronRight className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => goToPage(paginatedData.totalPages)} disabled={currentPage === paginatedData.totalPages}><ChevronsRight className="w-4 h-4" /></Button>
               </div>
             </div>
           )}
