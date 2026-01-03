@@ -1,1 +1,4 @@
 project_id = "vwixoidkzaqvuigmeogp"
+
+[functions.save-daily-snapshot]
+verify_jwt = false

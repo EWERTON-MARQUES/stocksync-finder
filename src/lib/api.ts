@@ -498,28 +498,45 @@ class ApiService {
     }
   }
 
-  // Get stock trend data for charts
+  // Get stock trend data for charts - from database snapshots
   async getStockTrendData(): Promise<{ date: string; stock: number; value: number }[]> {
-    const allProducts = await this.getAllProductsForStats();
-    
-    // Create last 7 days of data based on current values with slight variations
-    const days = 7;
-    const data = [];
-    const totalStock = allProducts.reduce((acc, p) => acc + p.stock, 0);
-    const totalValue = allProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const variation = 1 + (Math.random() - 0.5) * 0.1; // +/- 5% variation
-      data.push({
-        date: date.toISOString().split('T')[0],
-        stock: Math.round(totalStock * variation),
-        value: Math.round(totalValue * variation),
-      });
+    try {
+      // Import supabase dynamically to avoid circular dependencies
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      // Get last 7 days of snapshots from database
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const { data: snapshots, error } = await supabase
+        .from('daily_stock_snapshots')
+        .select('date, total_stock, total_value')
+        .gte('date', sevenDaysAgo.toISOString().split('T')[0])
+        .order('date', { ascending: true });
+      
+      if (error || !snapshots || snapshots.length === 0) {
+        console.log('No snapshots found, using current data');
+        // Fallback to current data if no snapshots
+        const allProducts = await this.getAllProductsForStats();
+        const totalStock = allProducts.reduce((acc, p) => acc + p.stock, 0);
+        const totalValue = allProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
+        
+        return [{
+          date: new Date().toISOString().split('T')[0],
+          stock: totalStock,
+          value: totalValue,
+        }];
+      }
+      
+      return snapshots.map(s => ({
+        date: s.date,
+        stock: s.total_stock,
+        value: s.total_value,
+      }));
+    } catch (error) {
+      console.error('Error fetching stock trend:', error);
+      return [];
     }
-    
-    return data;
   }
 
   // Get top selling products for chart
