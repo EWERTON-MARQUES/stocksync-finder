@@ -371,19 +371,55 @@ class ApiService {
         return qty > 0 ? 'entry' : 'exit';
       };
 
-      return movements.map((m: any) => ({
-        id: String(m.id || Math.random()),
-        productId: String(m.product_id || m.productId || productId),
-        type: normalizeMovementType(m.type || m.movementType, m.totalQuantity || m.quantity || m.qty),
-        quantity: Math.abs(Number(m.totalQuantity || m.quantity || m.qty || 0)),
-        previousStock: Number(m.previous_stock || m.previousStock || m.oldQuantity || m.avaiableQuantity || 0),
-        newStock: Number(m.new_stock || m.newStock || m.newQuantity || m.current_stock || m.balance || 0),
-        reason: m.reason || m.description || m.note || m.obs || 'Movimentação',
-        reference: m.reference || m.order_id || m.document || m.orderId || m.fullfilmentOrderId || '',
-        userId: String(m.user_id || m.userId || 'system'),
-        userName: m.user_name || m.userName || m.user?.name || 'Sistema',
-        createdAt: m.created_at || m.createdAt || m.date || new Date().toISOString(),
-      }));
+      return movements.map((m: any) => {
+        const rawType = m.type || m.movementType;
+        const qtyRaw = m.totalQuantity ?? m.quantity ?? m.qty ?? 0;
+        const qty = Math.abs(Number(qtyRaw || 0));
+        const type = normalizeMovementType(rawType, qtyRaw);
+
+        // Wedrop stock-history commonly provides the stock AFTER the movement as one of:
+        // - balance
+        // - avaiableQuantity (sic)
+        // - availableQuantity
+        const afterCandidate =
+          m.balance ??
+          m.avaiableQuantity ??
+          m.availableQuantity ??
+          m.current_stock ??
+          m.new_stock ??
+          m.newStock ??
+          m.newQuantity;
+
+        const beforeCandidate = m.previous_stock ?? m.previousStock ?? m.oldQuantity;
+
+        const after = afterCandidate == null ? null : Number(afterCandidate);
+        const before = beforeCandidate == null ? null : Number(beforeCandidate);
+
+        let newStock = after != null ? after : 0;
+        let previousStock = before != null ? before : 0;
+
+        // If we only know the AFTER stock, compute BEFORE based on movement type + quantity
+        if (before == null && after != null) {
+          previousStock = type === 'exit' ? after + qty : after - qty;
+        }
+
+        if (previousStock < 0) previousStock = 0;
+        if (newStock < 0) newStock = 0;
+
+        return {
+          id: String(m.id || Math.random()),
+          productId: String(m.product_id || m.productId || productId),
+          type,
+          quantity: qty,
+          previousStock,
+          newStock,
+          reason: m.reason || m.description || m.note || m.obs || 'Movimentação',
+          reference: m.reference || m.order_id || m.document || m.orderId || m.fullfilmentOrderId || '',
+          userId: String(m.user_id || m.userId || 'system'),
+          userName: m.user_name || m.userName || m.user?.name || 'Sistema',
+          createdAt: m.created_at || m.createdAt || m.date || new Date().toISOString(),
+        };
+      });
     } catch (error) {
       console.error('Error fetching movements:', error);
       return [];
