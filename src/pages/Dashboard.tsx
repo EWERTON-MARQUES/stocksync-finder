@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Package, Boxes, AlertTriangle, XCircle, DollarSign, ArrowUpDown, RefreshCw, TrendingUp, TrendingDown, ArrowRight, BarChart3 } from 'lucide-react';
+import { Package, Boxes, AlertTriangle, XCircle, DollarSign, Layers, RefreshCw, TrendingUp, TrendingDown, ArrowRight, BarChart3 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StatCard } from '@/components/ui/stat-card';
@@ -142,15 +142,15 @@ export default function Dashboard() {
           iconClassName="bg-destructive/10 text-destructive"
         />
         <StatCard
-          title="Valor em Estoque"
+          title="Custo em Estoque"
           value={formatCurrency(stats?.totalValue || 0)}
           icon={DollarSign}
           iconClassName="bg-chart-1/10 text-chart-1"
         />
         <StatCard
-          title="Movimentações"
-          value={formatNumber(stats?.recentMovements || 0)}
-          icon={ArrowUpDown}
+          title="Categorias"
+          value={formatNumber(categoryData.length || 0)}
+          icon={Layers}
           iconClassName="bg-chart-2/10 text-chart-2"
         />
       </div>
