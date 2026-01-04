@@ -118,7 +118,7 @@ export default function Reports() {
     ? totalProductsFromApi 
     : filteredProducts.length;
   const totalStock = filteredProducts.reduce((acc, p) => acc + p.stock, 0);
-  const totalCostValue = filteredProducts.reduce((acc, p) => acc + (p.costPrice * p.stock), 0);
+  const totalCostValue = filteredProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
   const lowStockCount = filteredProducts.filter(p => p.stock > 0 && p.stock <= 80).length;
   const outOfStockCount = filteredProducts.filter(p => p.stock === 0).length;
   const avgStock = totalProducts > 0 ? totalStock / totalProducts : 0;
@@ -128,7 +128,7 @@ export default function Reports() {
   const categoryAnalysis = categories.map(cat => {
     const catProducts = filteredProducts.filter(p => p.category === cat.name);
     const stock = catProducts.reduce((acc, p) => acc + p.stock, 0);
-    const costValue = catProducts.reduce((acc, p) => acc + (p.costPrice * p.stock), 0);
+    const costValue = catProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
     const lowStock = catProducts.filter(p => p.stock > 0 && p.stock <= 80).length;
     const outOfStock = catProducts.filter(p => p.stock === 0).length;
     return {
@@ -145,7 +145,7 @@ export default function Reports() {
   const supplierAnalysis = suppliers.map(sup => {
     const supProducts = filteredProducts.filter(p => p.supplier === sup.name);
     const stock = supProducts.reduce((acc, p) => acc + p.stock, 0);
-    const costValue = supProducts.reduce((acc, p) => acc + (p.costPrice * p.stock), 0);
+    const costValue = supProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
     const lowStock = supProducts.filter(p => p.stock > 0 && p.stock <= 80).length;
     const outOfStock = supProducts.filter(p => p.stock === 0).length;
     return {
@@ -162,7 +162,7 @@ export default function Reports() {
   const abcProducts = [...filteredProducts]
     .map(p => ({
       ...p,
-      totalCostValue: p.costPrice * p.stock,
+      totalCostValue: p.price * p.stock,
       salesScore: (p.avgSellsQuantityPast30Days ?? 0) * 30 + (p.soldQuantity ?? 0),
     }))
     .sort((a, b) => b.salesScore - a.salesScore);
@@ -193,13 +193,13 @@ export default function Reports() {
 
   // Top products by cost value
   const topByCostValue = [...filteredProducts]
-    .map(p => ({ name: p.name.substring(0, 30), costValue: p.costPrice * p.stock, stock: p.stock }))
+    .map(p => ({ name: p.name.substring(0, 30), costValue: p.price * p.stock, stock: p.stock }))
     .sort((a, b) => b.costValue - a.costValue)
     .slice(0, 10);
 
   // Top products by stock
   const topByStock = [...filteredProducts]
-    .map(p => ({ name: p.name.substring(0, 30), stock: p.stock, costValue: p.costPrice * p.stock }))
+    .map(p => ({ name: p.name.substring(0, 30), stock: p.stock, costValue: p.price * p.stock }))
     .sort((a, b) => b.stock - a.stock)
     .slice(0, 10);
 

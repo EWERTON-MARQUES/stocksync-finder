@@ -452,7 +452,7 @@ class ApiService {
       // Count low stock (stock between 1-80) and out of stock (stock = 0)
       const lowStockProducts = allProducts.filter(p => p.stock > 0 && p.stock <= 80).length;
       const outOfStockProducts = allProducts.filter(p => p.stock === 0).length;
-      const totalValue = allProducts.reduce((acc, p) => acc + (p.costPrice * p.stock), 0);
+      const totalValue = allProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
       
       console.log('Dashboard Stats:', { totalProducts, totalStock, lowStockProducts, outOfStockProducts, totalValue });
       
@@ -494,7 +494,7 @@ class ApiService {
       const allProducts = await this.getAllProductsForStats();
       const totalProducts = allProducts.length;
       const totalStock = allProducts.reduce((acc, p) => acc + p.stock, 0);
-      const totalValue = allProducts.reduce((acc, p) => acc + (p.costPrice * p.stock), 0);
+      const totalValue = allProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
       const lowStockProducts = allProducts.filter(p => p.stock > 0 && p.stock <= 80).length;
       const outOfStockProducts = allProducts.filter(p => p.stock === 0).length;
       
